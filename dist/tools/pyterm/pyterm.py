@@ -21,7 +21,9 @@ class SerCmd(cmd.Cmd):
 
         self.aliases = dict()
         self.regs = []
+        self.ignores = []
         self.load_config()
+
         try:
             readline.read_history_file()
         except IOError:
@@ -119,6 +121,17 @@ class SerCmd(cmd.Cmd):
         return tok
 
     def do_filter(self, line):
+    def do_ignore(self, line):
+        self.ignores.append(re.compile(line.strip()))
+
+    def do_unignore(self, line):
+        for r in self.ignores:
+            if (r.pattern == line.strip()):
+                print("Remove ignore for %s" % r.pattern)
+                self.ignores.remove(r)
+                return
+        sys.stderr.write("Ignore for %s not found" % r.pattern)
+
         self.regs.append(re.compile(line.strip()))
 
     def do_unfilter(self, line):
@@ -127,7 +140,7 @@ class SerCmd(cmd.Cmd):
                 print("Remove filter for %s" % r.pattern)
                 self.regs.remove(r)
                 return
-        sys.stderr.write("Filter for %s not found" % r.pattern)
+        sys.stderr.write("Filter for %s not found\n" % line.strip())
 
     def load_config(self):
         self.config = ConfigParser.SafeConfigParser()
@@ -147,7 +160,15 @@ class SerCmd(cmd.Cmd):
         while (1):
             c = self.ser.read(1)
             if c == '\n' or c == '\r':
-                if (len(self.regs)):
+                if (len(self.ignores)):
+                    ignored = False
+                    for i in self.ignores:
+                        if i.match(output):
+                            ignored = True
+                            break
+                    if not ignored:
+                        self.logger.info(output)
+                elif (len(self.regs)):
                     for r in self.regs:
                         if r.match(output):
                             self.logger.info(output)
