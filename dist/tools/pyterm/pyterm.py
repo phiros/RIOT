@@ -20,6 +20,7 @@ class SerCmd(cmd.Cmd):
             os.makedirs(self.configdir)
 
         self.aliases = dict()
+        self.regs = []
         self.load_config()
         try:
             readline.read_history_file()
@@ -55,7 +56,7 @@ class SerCmd(cmd.Cmd):
         self.ser.setRTS(0)
 
         # start serial->console thread
-        receiver_thread = threading.Thread(target=reader, args=(self.ser,self.logger))
+        receiver_thread = threading.Thread(target=self.reader)
         receiver_thread.setDaemon(1)
         receiver_thread.start()
 
@@ -117,6 +118,17 @@ class SerCmd(cmd.Cmd):
                 return self.aliases[alias] + tok[len(alias):]
         return tok
 
+    def do_filter(self, line):
+        self.regs.append(re.compile(line.strip()))
+
+    def do_unfilter(self, line):
+        for r in self.regs:
+            if (r.pattern == line.strip()):
+                print("Remove filter for %s" % r.pattern)
+                self.regs.remove(r)
+                return
+        sys.stderr.write("Filter for %s not found" % r.pattern)
+
     def load_config(self):
         self.config = ConfigParser.SafeConfigParser()
         self.config.read([self.configdir + os.path.sep + self.configfile])
@@ -130,18 +142,22 @@ class SerCmd(cmd.Cmd):
                     if not self.__dict__.has_key(opt):
                         self.__dict__[opt] = self.config.get(sec, opt)
 
-
-def reader(ser, logger):
-    output = ""
-    while (1):
-        c = ser.read(1)
-        if c == '\n' or c == '\r':
-            logger.info(output)
-            output = ""
-        else:
-            output += c
-        #sys.stdout.write(c)
-        #sys.stdout.flush()
+    def reader(self):
+        output = ""
+        while (1):
+            c = self.ser.read(1)
+            if c == '\n' or c == '\r':
+                if (len(self.regs)):
+                    for r in self.regs:
+                        if r.match(output):
+                            self.logger.info(output)
+                else:
+                    self.logger.info(output)
+                output = ""
+            else:
+                output += c
+            #sys.stdout.write(c)
+            #sys.stdout.flush()
 
 if __name__ == "__main__":
 
