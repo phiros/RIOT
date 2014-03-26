@@ -156,7 +156,7 @@ class SerCmd(cmd.Cmd):
                 print("Remove ignore for %s" % r.pattern)
                 self.ignores.remove(r)
                 return
-        sys.stderr.write("Ignore for %s not found\n" % r.pattern)
+        sys.stderr.write("Ignore for %s not found\n" % line.strip())
 
     def do_PYTERM_filter(self, line):
         self.regs.append(re.compile(line.strip()))
