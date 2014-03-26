@@ -11,12 +11,14 @@ defaultfile     = "pyterm.conf"
 
 class SerCmd(cmd.Cmd):
 
-    def __init__(self, port=None, baudrate=None, confdir=None, conffile=None,):
+    def __init__(self, port=None, baudrate=None, confdir=None, conffile=None, server=None, tcp_port=None):
         cmd.Cmd.__init__(self)
         self.port = port
         self.baudrate = baudrate
         self.configdir = confdir
         self.configfile = conffile
+        self.server = server
+        self.tcp_port = tcp_port
 
         if not os.path.exists(self.configdir):
             os.makedirs(self.configdir)
@@ -222,9 +224,13 @@ if __name__ == "__main__":
     parser.add_argument("-c", "--config",
             help="Specify the config filename, default is %s" % defaultfile,
             default=defaultfile)
+    parser.add_argument("-s", "--server",
+            help="Connect via TCP to this server to send output as JSON")
+    parser.add_argument("-P", "--tcp_port",
+            help="Port at the JSON server")
     args = parser.parse_args()
 
-    myshell = SerCmd(args.port, args.baudrate, args.directory, args.config)
+    myshell = SerCmd(args.port, args.baudrate, args.directory, args.config, args.server, args.tcp_port)
     myshell.prompt = ''
 
     try:
