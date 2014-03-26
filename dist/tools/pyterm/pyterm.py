@@ -25,7 +25,7 @@ class SerCmd(cmd.Cmd):
             os.makedirs(self.configdir)
 
         self.aliases = dict()
-        self.regs = []
+        self.filters = []
         self.ignores = []
         self.json_regs = []
         self.load_config()
@@ -104,11 +104,11 @@ class SerCmd(cmd.Cmd):
                 self.config.add_section("aliases")
             for alias in self.aliases:
                 self.config.set("aliases", alias, self.aliases[alias])
-        if len(self.regs):
+        if len(self.filters):
             if not self.config.has_section("filters"):
                 self.config.add_section("filters")
             i = 0
-            for r in self.regs:
+            for r in self.filters:
                 self.config.set("filters", "filter%i" % i, r.pattern)
                 i += 1
         if len(self.ignores):
@@ -159,13 +159,13 @@ class SerCmd(cmd.Cmd):
         sys.stderr.write("Ignore for %s not found\n" % line.strip())
 
     def do_PYTERM_filter(self, line):
-        self.regs.append(re.compile(line.strip()))
+        self.filters.append(re.compile(line.strip()))
 
     def do_PYTERM_unfilter(self, line):
-        for r in self.regs:
+        for r in self.filters:
             if (r.pattern == line.strip()):
                 print("Remove filter for %s" % r.pattern)
-                self.regs.remove(r)
+                self.filters.remove(r)
                 return
         sys.stderr.write("Filter for %s not found\n" % line.strip())
 
@@ -187,7 +187,7 @@ class SerCmd(cmd.Cmd):
         for sec in self.config.sections():
             if sec == "filters":
                 for opt in self.config.options(sec):
-                    self.regs.append(re.compile(self.config.get(sec, opt)))
+                    self.filters.append(re.compile(self.config.get(sec, opt)))
             if sec == "ignores":
                 for opt in self.config.options(sec):
                     self.ignores.append(re.compile(self.config.get(sec, opt)))
@@ -210,8 +210,8 @@ class SerCmd(cmd.Cmd):
                         if i.search(output):
                             ignored = True
                             break
-                if (len(self.regs)):
-                    for r in self.regs:
+                if (len(self.filters)):
+                    for r in self.filters:
                         if r.search(output):
                             if not ignored:
                                 self.logger.info(output)
