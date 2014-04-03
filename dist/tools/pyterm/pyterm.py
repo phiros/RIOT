@@ -2,6 +2,9 @@
 # -*- coding: utf-8 -*-
 
 import cmd, serial, sys, threading, readline, time, ConfigParser, logging, os, argparse, re
+from twisted.internet import reactor
+from twisted.internet.protocol import Protocol, ReconnectingClientFactory
+
 
 ### set some default options
 defaultport     = "/dev/ttyUSB0"
@@ -11,14 +14,12 @@ defaultfile     = "pyterm.conf"
 
 class SerCmd(cmd.Cmd):
 
-    def __init__(self, port=None, baudrate=None, confdir=None, conffile=None, server=None, tcp_port=None):
+    def __init__(self, port=None, baudrate=None, confdir=None, conffile=None):
         cmd.Cmd.__init__(self)
         self.port = port
         self.baudrate = baudrate
         self.configdir = confdir
         self.configfile = conffile
-        self.server = server
-        self.tcp_port = tcp_port
 
         if not os.path.exists(self.configdir):
             os.makedirs(self.configdir)
@@ -26,6 +27,7 @@ class SerCmd(cmd.Cmd):
         self.aliases = dict()
         self.regs = []
         self.ignores = []
+        self.json_regs = []
         self.load_config()
 
         try:
@@ -89,7 +91,9 @@ class SerCmd(cmd.Cmd):
 
     def do_PYTERM_exit(self, line):
         readline.write_history_file()
-        sys.exit(0)
+        if reactor.running:
+            reactor.stop()
+        return True
 
     def do_PYTERM_save(self, line):
         if not self.config.has_section("general"):
@@ -165,6 +169,17 @@ class SerCmd(cmd.Cmd):
                 return
         sys.stderr.write("Filter for %s not found\n" % line.strip())
 
+    def do_PYTERM_json(self, line):
+        self.json_regs.append(re.compile(line.strip()))
+
+    def do_PYTERM_unjson(self, line):
+        for r in self.json_regs:
+            if (r.pattern == line.strip()):
+                print("Remove JSON regex for %s" % r.pattern)
+                self.json_regs.remove(r)
+                return
+        sys.stderr.write("JSON regex for %s not found\n" % line.strip())
+
     def load_config(self):
         self.config = ConfigParser.SafeConfigParser()
         self.config.read([self.configdir + os.path.sep + self.configfile])
@@ -203,11 +218,49 @@ class SerCmd(cmd.Cmd):
                 else:
                     if not ignored:
                         self.logger.info(output)
+
+                if (len(self.json_regs)):
+                    for j in self.json_regs:
+                        if j.search(output):
+                            if (self.factory.myproto):
+                                self.factory.myproto.sendMessage('{"raw":"%s"}' % output)
+
                 output = ""
             else:
                 output += c
             #sys.stdout.write(c)
             #sys.stdout.flush()
+
+class PytermProt(Protocol):
+    def dataReceived(self, data):
+        stdout.write(data)
+
+    def sendMessage(self, msg):
+        self.transport.write("%d#%s\n" % (len(msg), msg))
+
+class PytermClientFactory(ReconnectingClientFactory):
+
+    def __init__(self):
+        self.myproto = None
+
+    def startedConnecting(self, connector):
+        print 'Started to connect.'
+
+    def buildProtocol(self, addr):
+        print 'Connected.'
+        print 'Resetting reconnection delay'
+        self.resetDelay()
+        self.myproto = PytermProt()
+        return self.myproto
+
+    def clientConnectionLost(self, connector, reason):
+        print 'Lost connection.  Reason:', reason
+        ReconnectingClientFactory.clientConnectionLost(self, connector, reason)
+
+    def clientConnectionFailed(self, connector, reason):
+        print 'Connection failed. Reason:', reason
+        ReconnectingClientFactory.clientConnectionFailed(self, connector,
+                                                         reason)
 
 if __name__ == "__main__":
 
@@ -226,14 +279,23 @@ if __name__ == "__main__":
             default=defaultfile)
     parser.add_argument("-s", "--server",
             help="Connect via TCP to this server to send output as JSON")
-    parser.add_argument("-P", "--tcp_port",
+    parser.add_argument("-P", "--tcp_port", type=int,
             help="Port at the JSON server")
     args = parser.parse_args()
 
-    myshell = SerCmd(args.port, args.baudrate, args.directory, args.config, args.server, args.tcp_port)
+    myshell = SerCmd(args.port, args.baudrate, args.directory, args.config)
     myshell.prompt = ''
 
     try:
-        myshell.cmdloop("Welcome to pyterm!\nType 'exit' to exit.")
+        if args.server and args.tcp_port:
+            myfactory = PytermClientFactory()
+            reactor.connectTCP(args.server, args.tcp_port, myfactory)
+            myshell.factory = myfactory
+            reactor.callInThread(myshell.cmdloop, "Welcome to pyterm!\nType 'exit' to exit.")
+            reactor.run()
+            sys.exit(0)
+        else:
+            myshell.cmdloop("Welcome to pyterm!\nType 'exit' to exit.")
+            sys.exit(0)
     except KeyboardInterrupt:
         myshell.do_PYTERM_exit(0)
