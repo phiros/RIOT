@@ -189,8 +189,8 @@ class SerCmd(cmd.Cmd):
         while (1):
             c = self.ser.read(1)
             if c == '\n' or c == '\r':
+                ignored = False
                 if (len(self.ignores)):
-                    ignored = False
                     for i in self.ignores:
                         if i.search(output):
                             ignored = True
