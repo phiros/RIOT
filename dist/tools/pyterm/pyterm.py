@@ -1,10 +1,9 @@
 #!/usr/bin/env python2
 # -*- coding: utf-8 -*-
 
-import cmd, serial, sys, threading, readline, time, ConfigParser, logging, os, argparse, re
+import cmd, serial, sys, threading, readline, time, ConfigParser, logging, os, argparse, re, signal
 from twisted.internet import reactor
 from twisted.internet.protocol import Protocol, ReconnectingClientFactory
-
 
 ### set some default options
 defaultport     = "/dev/ttyUSB0"
@@ -89,10 +88,11 @@ class SerCmd(cmd.Cmd):
         self.ser.setDTR(1)
         self.ser.setDTR(0)
 
-    def do_PYTERM_exit(self, line):
+    def do_PYTERM_exit(self, line, unused=None):
+        print("Exiting Pyterm")
         readline.write_history_file()
         if reactor.running:
-            reactor.stop()
+            reactor.callFromThread(reactor.stop)
         return True
 
     def do_PYTERM_save(self, line):
@@ -247,7 +247,7 @@ class SerCmd(cmd.Cmd):
 
 class PytermProt(Protocol):
     def dataReceived(self, data):
-        stdout.write(data)
+        sys.stdout.write(data)
 
     def sendMessage(self, msg):
         self.transport.write("%d#%s\n" % (len(msg), msg))
@@ -276,6 +276,9 @@ class PytermClientFactory(ReconnectingClientFactory):
         ReconnectingClientFactory.clientConnectionFailed(self, connector,
                                                          reason)
 
+def __stop_reactor(signum, stackframe):
+    sys.stderr.write("Ctrl-C is disabled, type '/exit' instead\n")
+
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Pyterm - The Python terminal program")
@@ -300,16 +303,12 @@ if __name__ == "__main__":
     myshell = SerCmd(args.port, args.baudrate, args.directory, args.config)
     myshell.prompt = ''
 
-    try:
-        if args.server and args.tcp_port:
-            myfactory = PytermClientFactory()
-            reactor.connectTCP(args.server, args.tcp_port, myfactory)
-            myshell.factory = myfactory
-            reactor.callInThread(myshell.cmdloop, "Welcome to pyterm!\nType 'exit' to exit.")
-            reactor.run()
-            sys.exit(0)
-        else:
-            myshell.cmdloop("Welcome to pyterm!\nType 'exit' to exit.")
-            sys.exit(0)
-    except KeyboardInterrupt:
-        myshell.do_PYTERM_exit(0)
+    if args.server and args.tcp_port:
+        myfactory = PytermClientFactory()
+        reactor.connectTCP(args.server, args.tcp_port, myfactory)
+        myshell.factory = myfactory
+        reactor.callInThread(myshell.cmdloop, "Welcome to pyterm!\nType '/exit' to exit.")
+        signal.signal(signal.SIGINT, __stop_reactor)
+        reactor.run()
+    else:
+        myshell.cmdloop("Welcome to pyterm!\nType 'exit' to exit.")
