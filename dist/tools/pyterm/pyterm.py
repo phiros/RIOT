@@ -27,7 +27,7 @@ class SerCmd(cmd.Cmd):
         self.aliases = dict()
         self.filters = []
         self.ignores = []
-        self.json_regs = []
+        self.json_regs = dict()
         self.load_config()
 
         try:
@@ -104,6 +104,11 @@ class SerCmd(cmd.Cmd):
                 self.config.add_section("aliases")
             for alias in self.aliases:
                 self.config.set("aliases", alias, self.aliases[alias])
+        if len(self.json_regs):
+            if not self.config.has_section("json_regs"):
+                self.config.add_section("json_regs")
+            for j in self.json_regs:
+                self.config.set("json_regs", j, self.json_regs[j].pattern)
         if len(self.filters):
             if not self.config.has_section("filters"):
                 self.config.add_section("filters")
@@ -170,15 +175,11 @@ class SerCmd(cmd.Cmd):
         sys.stderr.write("Filter for %s not found\n" % line.strip())
 
     def do_PYTERM_json(self, line):
-        self.json_regs.append(re.compile(line.strip()))
+        self.json_regs[line.split(' ')[0].strip()] = re.compile(line.split(' ')[1].strip())
 
     def do_PYTERM_unjson(self, line):
-        for r in self.json_regs:
-            if (r.pattern == line.strip()):
-                print("Remove JSON regex for %s" % r.pattern)
-                self.json_regs.remove(r)
-                return
-        sys.stderr.write("JSON regex for %s not found\n" % line.strip())
+        if not self.aliases.pop(line, None):
+            sys.stderr.write("JSON regex with ID %s not found" % line)
 
     def load_config(self):
         self.config = ConfigParser.SafeConfigParser()
@@ -191,6 +192,10 @@ class SerCmd(cmd.Cmd):
             if sec == "ignores":
                 for opt in self.config.options(sec):
                     self.ignores.append(re.compile(self.config.get(sec, opt)))
+            if sec == "json_regs":
+                for opt in self.config.options(sec):
+                    print("add json regex for %s" % self.config.get(sec, opt))
+                    self.json_regs[opt] = re.compile(self.config.get(sec, opt))
             if sec == "aliases":
                 for opt in self.config.options(sec):
                     self.aliases[opt] = self.config.get(sec, opt)
@@ -219,11 +224,20 @@ class SerCmd(cmd.Cmd):
                     if not ignored:
                         self.logger.info(output)
 
-                if (len(self.json_regs)):
+                if (len(self.json_regs)) and self.factory and self.factory.myproto:
                     for j in self.json_regs:
-                        if j.search(output):
-                            if (self.factory.myproto):
-                                self.factory.myproto.sendMessage('{"raw":"%s"}' % output)
+                        m = self.json_regs[j].search(output)
+                        if m:
+                            json_obj = '{"id":%d, ' % int(j)
+                            json_obj += '"raw":"%s", ' % output
+                            for g in m.groupdict():
+                                json_obj += '"%s":"%s", ' % (g, m.groupdict()[g])
+
+                            # eliminate the superfluous last ", "
+                            json_obj = json_obj[:-2]
+
+                            json_obj += "}"
+                            self.factory.myproto.sendMessage(json_obj)
 
                 output = ""
             else:
