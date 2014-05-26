@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2
 # -*- coding: utf-8 -*-
 
 import cmd, serial, sys, threading, readline, time, ConfigParser, logging, os, argparse, re, signal
@@ -243,7 +243,18 @@ class SerCmd(cmd.Cmd):
     def reader(self):
         output = ""
         while (1):
-            c = self.ser.read(1)
+            try:
+                c = self.ser.read(1)
+            except serial.SerialException as se:
+                sys.stderr.write("Serial port disconnected, waiting to get reconnected...\n")
+                self.ser.close()
+                time.sleep(1) 
+                if os.path.exists(self.port):
+                    sys.stderr.write("Try to reconnect to %s again...\n" % (self.port))
+                    self.ser = serial.Serial(port=self.port, baudrate=self.baudrate, dsrdtr=0, rtscts=0)
+                    self.ser.setDTR(0)
+                    self.ser.setRTS(0)
+                continue
             if c == '\n' or c == '\r':
                 ignored = False
                 if (len(self.ignores)):
