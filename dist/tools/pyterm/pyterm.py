@@ -13,7 +13,7 @@ defaultport     = "/dev/ttyUSB0"
 defaultbaud     = 115200
 defaultdir      = os.environ['HOME'] + os.path.sep + '.pyterm'
 defaultfile     = "pyterm-" + defaulthostname + ".conf"
-defaultrunname  = "default-run"
+defaultrunname  = defaulthostname
 
 class SerCmd(cmd.Cmd):
 
@@ -55,7 +55,7 @@ class SerCmd(cmd.Cmd):
         fmt_str = '%(asctime)s - %(levelname)s # %(message)s'
         formatter = logging.Formatter(fmt_str)
         
-        directory = self.configdir + os.path.sep + self.host
+        directory = self.configdir + os.path.sep + 'log'
         if not os.path.exists(directory):
             os.makedirs(directory)
         logging.basicConfig(filename=directory + os.path.sep + self.run_name + '.log', level=logging.DEBUG, format=fmt_str)
