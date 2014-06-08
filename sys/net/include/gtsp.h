@@ -55,18 +55,6 @@ void gtsp_pause(void);
 
 void gtsp_resume(void);
 
-static void _gtsp_beacon_thread(void);
-
-static void _gtsp_cyclic_driver_thread(void);
-
-/**
- * @brief sends a sync packet to all neighbors.
- */
-static void _gtsp_send_beacon(void);
-
-static int _gtsp_buffer_lookup(generic_ringbuffer_t *rb,
-		uint16_t src);
-
 /**
  * @brief reads a frame supplied by the mac layer of sixlowpan.
  * This function should only be called by mac.c

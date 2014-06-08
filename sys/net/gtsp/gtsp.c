@@ -39,6 +39,11 @@
 #define GTSP_JUMP_THRESHOLD (10)
 #define GTSP_MOVING_ALPHA 0.9
 
+static void _gtsp_beacon_thread(void);
+static void _gtsp_cyclic_driver_thread(void);
+static void _gtsp_send_beacon(void);
+static int _gtsp_buffer_lookup(generic_ringbuffer_t *rb, uint16_t src);
+
 static int _gtsp_beacon_pid = 0;
 static int _gtsp_clock_pid = 0;
 static uint32_t _gtsp_beacon_interval = GTSP_BEACON_INTERVAL;
@@ -243,6 +248,17 @@ void gtsp_pause(void) {
 void gtsp_resume(void) {
 	_gtsp_pause = false;
 	puts("GTSP enabled");
+}
+
+void gtsp_driver_timestamp(uint8_t *ieee802154_frame, uint8_t frame_length) {
+	gtimer_timeval_t now;
+	ieee802154_frame_t frame;
+	uint8_t hdrlen = ieee802154_frame_read(ieee802154_frame, &frame, frame_length);
+	gtsp_beacon_t *beacon = (gtsp_beacon_t *) frame.payload;
+	gtimer_sync_now(&now);
+	beacon->local = now.local;
+	beacon->global = now.global;
+	memcpy(ieee802154_frame + hdrlen, beacon, sizeof(gtsp_beacon_t));
 }
 
 static int _gtsp_buffer_lookup(generic_ringbuffer_t *rb, uint16_t src) {
