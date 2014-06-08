@@ -510,6 +510,9 @@ static void receive_cc110x_packet(radio_packet_t *trans_p)
     trans_p->dst = p.address;
     trans_p->rssi = cc110x_rx_buffer[rx_buffer_pos].rssi;
     trans_p->lqi = cc110x_rx_buffer[rx_buffer_pos].lqi;
+#ifdef MODULE_GTSP
+    trans_p->toa = cc110x_rx_buffer[rx_buffer_pos].toa;
+#endif
     trans_p->length = p.length - CC1100_HEADER_LENGTH;
     memcpy((void *) &(data_buffer[transceiver_buffer_pos * PAYLOAD_SIZE]), p.data, CC1100_MAX_DATA_LENGTH);
     eINT();

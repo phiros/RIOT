@@ -45,6 +45,11 @@ volatile uint8_t rx_buffer_next;        ///< Next packet in RX queue
 void cc110x_rx_handler(void)
 {
     uint8_t res = 0;
+#ifdef MODULE_GTIMER
+    gtimer_timeval_t gtimer_toa;
+    gtimer_sync_now(&gtimer_toa);
+#endif
+
 
     /* Possible packet received, RX -> IDLE (0.1 us) */
     rflags.CAA      = 0;
@@ -82,6 +87,10 @@ void cc110x_rx_handler(void)
             return;
         }
 
+#endif
+
+#ifdef MODULE_GTIMER
+        cc110x_rx_buffer[rx_buffer_next].toa = gtimer_toa;
 #endif
 
         /* notify transceiver thread if any */

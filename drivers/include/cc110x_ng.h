@@ -8,4 +8,8 @@
 #include "cc110x_ng/cc110x-arch.h"
 #include "cc110x_ng/cc110x_spi.h"
 
+#ifdef MODULE_GTIMER
+#include "gtimer.h"
+#endif
+
 #endif /* CC110X_NG_H */

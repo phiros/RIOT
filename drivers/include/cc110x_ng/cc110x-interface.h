@@ -27,6 +27,10 @@
 #include "radio/types.h"
 #include "cc110x-config.h"
 
+#ifdef MODULE_GTIMER
+#include "gtimer.h"
+#endif
+
 #define CC1100_MAX_DATA_LENGTH (58)
 
 #define CC1100_HEADER_LENGTH   (3)             ///< Header covers SRC, DST and FLAGS
@@ -99,6 +103,9 @@ cc110x_packet_t;
 typedef struct {
     uint8_t rssi;
     uint8_t lqi;
+#ifdef MODULE_GTIMER
+    gtimer_timeval_t toa;
+#endif
     cc110x_packet_t packet;
 } rx_buffer_t;
 
