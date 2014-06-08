@@ -20,4 +20,5 @@
 // identifies a topology beacon
 #define NETWORK_TOPOLOGY_DISPATCH (0x22)
 
+
 #endif /* NALP_PROTOCOLS_H_ */

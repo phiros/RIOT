@@ -80,6 +80,9 @@ endif
 ifneq (,$(filter clocksync_eval,$(USEMODULE)))
     DIRS += net/clocksync/clocksync_eval
 endif
+ifneq (,$(filter gtsp,$(USEMODULE)))
+    DIRS += net/clocksync/gtsp
+endif
 ifneq (,$(filter random,$(USEMODULE)))
     DIRS += random
 endif
