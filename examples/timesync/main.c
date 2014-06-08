@@ -32,6 +32,7 @@
 #include "clocksync/gtsp.h"
 #endif
 
+
 #ifdef MODULE_LTC4150
 #include "ltc4150.h"
 #endif
@@ -71,7 +72,7 @@ int main(void) {
 #endif
 
 #ifdef MODULE_TRANSCEIVER
- //gtsp_init();
+//gtsp_init();
 #endif
 
 	(void) puts("Welcome to RIOT!");

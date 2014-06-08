@@ -127,6 +127,9 @@ extern void _mersenne_get(int argc, char **argv);
 #ifdef MODULE_CLOCKSYNC_EVAL
 extern void _clocksync_eval_handler(int argc, char **argv);
 #endif
+#ifdef MODULE_GTSP
+extern void _gtsp(int argc, char **argv);
+#endif
 
 
 const shell_command_t _shell_command_list[] = {
@@ -200,6 +203,9 @@ const shell_command_t _shell_command_list[] = {
 #endif
 #ifdef MODULE_CLOCKSYNC_EVAL
     { "clocksynce", "Configures the clocksync evaluation module", _clocksync_eval_handler },
+#endif
+#ifdef MODULE_GTSP
+    { "gtsp", "Turns GTSP clock-sync on/off", _gtsp },
 #endif
 #ifdef CPU_X86
     {"lspci", "Lists PCI devices", _x86_lspci},

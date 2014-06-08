@@ -73,6 +73,10 @@ pid_t sigio_child_pid;
 
 void _native_handle_tap_input(void)
 {
+#ifdef MODULE_GTIMER
+	gtimer_timeval_t gtimer_toa;
+	gtimer_sync_now(&gtimer_toa);
+#endif
     int nread;
     union eth_frame frame;
     radio_packet_t p;
@@ -91,17 +95,19 @@ void _native_handle_tap_input(void)
                 DEBUG("_native_handle_tap_input: no payload\n");
             }
             else {
+#ifdef MODULE_GTIMER
+            	gtimer_timeval_t gtimer_toa;
+            	gtimer_sync_now(&gtimer_toa);
+#else
                 unsigned long t = hwtimer_now();
+#endif
                 p.processing = 0;
                 p.src = ntohs(frame.field.payload.nn_header.src);
                 p.dst = ntohs(frame.field.payload.nn_header.dst);
                 p.rssi = 0;
                 p.lqi = 0;
 #ifdef MODULE_GTIMER
-                gtimer_timeval_t gtimer_now;
-                gtimer_sync_now(&gtimer_now);
-                p.toa.local = gtimer_now.local;
-                p.toa.global = gtimer_now.global;
+                p.toa = gtimer_toa;
 #else
                 p.toa.seconds = HWTIMER_TICKS_TO_US(t)/1000000;
                 p.toa.microseconds = HWTIMER_TICKS_TO_US(t)%1000000;

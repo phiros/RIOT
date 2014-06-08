@@ -32,7 +32,7 @@ export QUIET ?= 1
 # Modules to include:
 
 USEMODULE += posix
-#USEMODULE += gtsp
+USEMODULE += gtsp
 USEMODULE += shell
 USEMODULE += shell_commands
 USEMODULE += ps
