@@ -43,6 +43,9 @@ endif
 ifneq (,$(filter clocksync_eval,$(USEMODULE)))
 	SRC += sc_clocksync_eval.c
 endif
+ifneq (,$(filter gtsp,$(USEMODULE)))
+	SRC += sc_gtsp.c
+endif
 ifeq ($(CPU),x86)
 	SRC += sc_x86_lspci.c
 endif
