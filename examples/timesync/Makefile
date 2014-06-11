@@ -24,6 +24,8 @@ export RIOTBASE ?= $(CURDIR)/../..
 # development process:
 #CFLAGS += -DDEVELHELP
 
+CFLAGS += -DGTSP_ENABLE_TRIGGER
+
 export LINKFLAGS += -lm
 
 # Change this to 0 show compiler invocation lines by default:
@@ -37,6 +39,7 @@ USEMODULE += shell
 USEMODULE += shell_commands
 USEMODULE += ps
 #USEMODULE += mac_filter
+#USEMODULE += bitvector
 USEMODULE += gtimer
 USEMODULE += clocksync_eval
 USEMODULE += sixlowpan
@@ -66,7 +69,7 @@ ifneq (,$(filter avsextrem,$(BOARD)))
 	USEMODULE += rtc
 	USEMODULE += config
 	USEMODULE += random
-	USEMODULE += cc110x
+	USEMODULE += cc110x_ng
 endif
 ifneq (,$(filter native,$(BOARD)))
 	USEMODULE += ltc4150

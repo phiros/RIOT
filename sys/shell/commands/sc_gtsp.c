@@ -24,20 +24,54 @@
 
 static void _print_help(void);
 
-void _gtsp(int argc, char **argv) {
-	if (argc == 2) {
-		if (!strcmp(argv[1], "on")) {
-			gtsp_resume();
-			return;
-		}
-		if (!strcmp(argv[1], "off")) {
-			gtsp_pause();
-			return;
-		}
-	}
-	_print_help();
+void _gtsp(int argc, char **argv)
+{
+    if (argc == 2)
+    {
+        if (!strcmp(argv[1], "on"))
+        {
+            puts("gtsp enabled");
+            gtsp_resume();
+            return;
+        }
+        if (!strcmp(argv[1], "off"))
+        {
+            puts("gtsp disabled");
+            gtsp_pause();
+            return;
+        }
+#ifdef GTSP_ENABLE_TRIGGER
+        if (!strcmp(argv[1], "trigger"))
+        {
+            gtsp_print_trigger();
+            return;
+        }
+    }
+    else if (argc == 4)
+    {
+        if (!strcmp(argv[1], "trigger"))
+        {
+            int16_t a = atoi(argv[3]);
+            if (!strcmp(argv[2], "rm"))
+            {
+                gtsp_del_trigger_address((uint8_t) a);
+                return;
+            }
+
+            if (!strcmp(argv[2], "add"))
+            {
+                gtsp_add_trigger_address((uint8_t) a);
+                return;
+            }
+        }
+    }
+#else
+    }
+#endif
+    _print_help();
 }
 
-static void _print_help(void) {
-	printf("Usage: gtsp on|off \n");
+static void _print_help(void)
+{
+    printf("Usage: gtsp [on] | [off] | [trigger [rm|add address]]  \n");
 }

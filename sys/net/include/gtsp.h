@@ -28,6 +28,9 @@
 
 #include "generic_ringbuffer.h"
 #include "gtimer.h"
+#include "radio/types.h"
+
+#define ABS64T(X)   ((X) < 0 ? -1*(X) : (X)) // not sure...
 
 typedef struct  __attribute__((packed)) {
 	uint8_t dispatch_marker; // << protocol marker
@@ -82,7 +85,7 @@ void gtsp_resume(void);
  * @brief reads a frame supplied by the mac layer of sixlowpan.
  * This function should only be called by mac.c
  */
-void gtsp_mac_read(uint8_t *frame_payload, uint16_t src, gtimer_timeval_t *toa);
+void gtsp_mac_read(uint8_t *frame_payload, radio_packet_t *p);
 
 /**
  * @brief Refreshes the timestamp in a frame.
@@ -90,5 +93,22 @@ void gtsp_mac_read(uint8_t *frame_payload, uint16_t src, gtimer_timeval_t *toa);
  * The function should only be executed by a transceiver driver.
  */
 void gtsp_driver_timestamp(uint8_t *ieee802154_frame, uint8_t frame_length);
+
+#ifdef GTSP_ENABLE_TRIGGER
+/**
+ * @brief adds a source address to the set of trigger addresses.
+ */
+void gtsp_add_trigger_address(uint8_t src);
+
+/**
+ * @brief deletes a source address to the set of trigger addresses.
+ */
+void gtsp_del_trigger_address(uint8_t src);
+
+/**
+ * @brief prints the list of stored trigger addresses.
+ */
+void gtsp_print_trigger(void);
+#endif
 
 #endif /* __GTSP_H */
