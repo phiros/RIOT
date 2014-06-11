@@ -37,7 +37,6 @@ USEMODULE += shell
 USEMODULE += shell_commands
 USEMODULE += ps
 #USEMODULE += mac_filter
-#USEMODULE += bitvector
 USEMODULE += gtimer
 USEMODULE += clocksync_eval
 USEMODULE += sixlowpan
@@ -62,6 +61,12 @@ ifneq (,$(filter avsextrem,$(BOARD)))
 	USEMODULE += random
 	USEMODULE += transceiver
 	USEMODULE += cc110x_ng
+endif
+ifneq (,$(filter avsextrem,$(BOARD)))
+	USEMODULE += rtc
+	USEMODULE += config
+	USEMODULE += random
+	USEMODULE += cc110x
 endif
 ifneq (,$(filter native,$(BOARD)))
 	USEMODULE += ltc4150

@@ -1,12 +1,18 @@
 /**
+ * Copyright (C) 2014  Philipp Rosenkranz.
  *
- * @ingroup sys
+ * This file is subject to the terms and conditions of the GNU Lesser General
+ * Public License. See the file LICENSE in the top level directory for more
+ * details.
+ *
+ * @ingroup gtsp
  * @{
  * @file    gtsp.c
  * @author  Philipp Rosenkranz <philipp.rosenkranz@fu-berlin.de>
  * @author  Daniel Jentsch <d.jentsch@fu-berlin.de>
  * @}
  */
+
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -29,8 +35,8 @@
 #define ENABLE_DEBUG (0)
 #include <debug.h>
 
-#define BEACON_STACK_SIZE (KERNEL_CONF_STACKSIZE_PRINTF)
-#define CYCLIC_STACK_SIZE (KERNEL_CONF_STACKSIZE_PRINTF)
+#define BEACON_STACK_SIZE (KERNEL_CONF_STACKSIZE_DEFAULT)
+#define CYCLIC_STACK_SIZE (KERNEL_CONF_STACKSIZE_DEFAULT)
 #define SEND_BUFFER_SIZE 	(64)
 
 #define LPC2387_FLOAT_CALC_TIME (10)
