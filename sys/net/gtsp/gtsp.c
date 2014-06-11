@@ -28,7 +28,6 @@
 #include "sixlowpan/mac.h"
 #include "malloc.h"
 
-
 #include "gtimer.h"
 #include "gtsp.h"
 #include "nalp_protocols.h"
@@ -38,9 +37,9 @@
 #define ENABLE_DEBUG (0)
 #include <debug.h>
 
-#define BEACON_STACK_SIZE (KERNEL_CONF_STACKSIZE_DEFAULT)
-#define CYCLIC_STACK_SIZE (KERNEL_CONF_STACKSIZE_DEFAULT)
-#define SEND_BUFFER_SIZE 	(64)
+#define GTSP_BEACON_STACK_SIZE (KERNEL_CONF_STACKSIZE_DEFAULT)
+#define GTSP_CYCLIC_STACK_SIZE (KERNEL_CONF_STACKSIZE_DEFAULT)
+#define GTSP_BEACON_BUFFER_SIZE (64)
 
 #define LPC2387_FLOAT_CALC_TIME (10)
 #define GTSP_MAX_NEIGHBORS (10)
@@ -59,17 +58,15 @@ static uint32_t _gtsp_beacon_interval = GTSP_BEACON_INTERVAL;
 static uint32_t _gtsp_prop_time = 0;
 static bool _gtsp_pause = true;
 static uint32_t _gtsp_jump_threshold = GTSP_JUMP_THRESHOLD;
+static bool gtsp_jumped = false;
 //static uint64_t _gtsp_sync_error_estimate = 0;
-bool gtsp_jumped = false;
 
-char beacon_stack[BEACON_STACK_SIZE];
-char cyclic_stack[CYCLIC_STACK_SIZE];
-char send_buffer[SEND_BUFFER_SIZE] =
-{ 0 };
-char gtsp_beacon_buffer[SEND_BUFFER_SIZE] =
+char gtsp_beacon_stack[GTSP_BEACON_STACK_SIZE];
+char gtsp_cyclic_stack[GTSP_CYCLIC_STACK_SIZE];
+char gtsp_beacon_buffer[GTSP_BEACON_BUFFER_SIZE] =
 { 0 };
 generic_ringbuffer_t gtsp_rb;
-gtsp_sync_point_t grb_buffer[GTSP_MAX_NEIGHBORS];
+gtsp_sync_point_t gtsp_grb_buffer[GTSP_MAX_NEIGHBORS];
 
 #ifdef GTSP_ENABLE_TRIGGER
 #include "bitvector.h"
@@ -89,19 +86,19 @@ void gtsp_init(void)
     }
 
     mutex_init(&gtsp_mutex);
-    grb_ringbuffer_init(&gtsp_rb, (char *) &grb_buffer, GTSP_MAX_NEIGHBORS,
+    grb_ringbuffer_init(&gtsp_rb, (char *) &gtsp_grb_buffer, GTSP_MAX_NEIGHBORS,
             sizeof(gtsp_sync_point_t));
 
 #ifdef GTSP_ENABLE_TRIGGER
     bitvector_init(_gtsp_trigger_sources);
 #endif
 
-    _gtsp_beacon_pid = thread_create(beacon_stack, BEACON_STACK_SIZE,
+    _gtsp_beacon_pid = thread_create(gtsp_beacon_stack, GTSP_BEACON_STACK_SIZE,
     PRIORITY_MAIN - 2, CREATE_STACKTEST, _gtsp_beacon_thread, "gtsp_beacon");
 
-    _gtsp_clock_pid = thread_create(cyclic_stack,
-    CYCLIC_STACK_SIZE, PRIORITY_MAIN - 2,
-    CREATE_STACKTEST, _gtsp_cyclic_driver_thread, "gtsp_cyclic_driver");
+    _gtsp_clock_pid = thread_create(gtsp_cyclic_stack, GTSP_CYCLIC_STACK_SIZE,
+            PRIORITY_MAIN - 2,
+            CREATE_STACKTEST, _gtsp_cyclic_driver_thread, "gtsp_cyclic_driver");
 
     puts("GTSP initialized");
 }
@@ -138,7 +135,7 @@ static void _gtsp_cyclic_driver_thread(void)
 
 static void _gtsp_send_beacon(void)
 {
-    DEBUG("sending beacon\n");
+    DEBUG("_gtsp_send_beacon\n");
     gtimer_timeval_t now;
     gtsp_beacon_t *gtsp_beacon = (gtsp_beacon_t *) gtsp_beacon_buffer;
     // NOTE: the calculation of the average rate used to be here
@@ -149,7 +146,6 @@ static void _gtsp_send_beacon(void)
     gtsp_beacon->relative_rate = now.rate;
     sixlowpan_mac_send_ieee802154_frame(0, NULL, 8, gtsp_beacon_buffer,
             sizeof(gtsp_beacon_t), 1);
-    DEBUG("sending beacon end\n");
 }
 
 static float gtsp_compute_rate(void)
@@ -204,13 +200,12 @@ static float gtsp_compute_rate(void)
         avg_rate = 0.00005;
     else if (avg_rate < -0.00005)
         avg_rate = -0.00005;
-    DEBUG("gtsp_compute_rate\n");
     return avg_rate;
 }
 
 void gtsp_mac_read(uint8_t *frame_payload, radio_packet_t *p)
 {
-    DEBUG("gtsp_read");
+    DEBUG("gtsp_mac_read");
     gtimer_timeval_t toa = p->toa;
     mutex_lock(&gtsp_mutex);
     gtsp_sync_point_t new_sync_point;
@@ -219,16 +214,15 @@ void gtsp_mac_read(uint8_t *frame_payload, radio_packet_t *p)
     float relative_rate = 0.0f;
     gtsp_beacon_t *gtsp_beacon = (gtsp_beacon_t *) frame_payload;
 
-
 #ifdef GTSP_ENABLE_TRIGGER
-   if(bitvector_is_member(_gtsp_trigger_sources, p->src))
-   {
+    if(bitvector_is_member(_gtsp_trigger_sources, p->src))
+    {
         printf("### event:trigger_received, from: %" PRIu16 ",", p->src);
         printf(" toa_local: %s,", l2s(toa.local, X64LL_SIGNED));
         printf(" toa_global: %s,", l2s(toa.global, X64LL_SIGNED));
         printf(" remote_local: %s,", l2s(gtsp_beacon->local, X64LL_SIGNED));
         printf(" remote_global: %s\n", l2s(gtsp_beacon->global, X64LL_SIGNED));
-   }
+    }
 #endif
     if (_gtsp_pause)
     {
@@ -238,10 +232,10 @@ void gtsp_mac_read(uint8_t *frame_payload, radio_packet_t *p)
 
     int buffer_index;
     // check for previously received beacons from the same node
-    DEBUG("gtsp_read: Looking up p->src address: %" PRIu16 "\n", p->src);
+    DEBUG("gtsp_mac_read: Looking up p->src address: %" PRIu16 "\n", p->src);
     if (-1 != (buffer_index = _gtsp_buffer_lookup(&gtsp_rb, p->src)))
     {
-        DEBUG("_gtsp_buffer_lookup success!");
+        DEBUG("gtsp_mac_read: _gtsp_buffer_lookup success!");
         grb_get_element(&gtsp_rb, (void **) &sync_point, buffer_index);
         // calculate local time between beacons
         int64_t delta_local = toa.local - sync_point->local_local;
@@ -279,13 +273,13 @@ void gtsp_mac_read(uint8_t *frame_payload, radio_packet_t *p)
     {
         gtsp_jumped = true;
         gtimer_sync_set_global_offset(offset);
-    } DEBUG("gtsp_read: gtsp_compute_rate");
+    }DEBUG("gtsp_mac_read: gtsp_compute_rate");
     // compute new relative clock rate based on new sync point
     float avg_rate = gtsp_compute_rate();
     gtimer_sync_set_relative_rate(avg_rate);
 
     mutex_unlock(&gtsp_mutex);
-    DEBUG("gtsp_read: mutex unlocked");
+    DEBUG("gtsp_mac_read: mutex unlocked");
 }
 
 void gtsp_set_beacon_delay(uint32_t delay_in_sec)
@@ -342,18 +336,23 @@ static int _gtsp_buffer_lookup(generic_ringbuffer_t *rb, uint16_t src)
 }
 
 #ifdef GTSP_ENABLE_TRIGGER
-void gtsp_add_trigger_address(uint8_t src) {
+void gtsp_add_trigger_address(uint8_t src)
+{
     bitvector_add(_gtsp_trigger_sources, src);
 }
 
-void gtsp_del_trigger_address(uint8_t src) {
+void gtsp_del_trigger_address(uint8_t src)
+{
     bitvector_remove(_gtsp_trigger_sources, src);
 }
 
-void gtsp_print_trigger(void) {
+void gtsp_print_trigger(void)
+{
     printf("trigger: ");
-    for(uint8_t i=0; i<255; i++) {
-        if(bitvector_is_member(_gtsp_trigger_sources, i)) {
+    for(uint8_t i=0; i<255; i++)
+    {
+        if(bitvector_is_member(_gtsp_trigger_sources, i))
+        {
             printf("%"PRIu8 " ", i);
         }
     }
