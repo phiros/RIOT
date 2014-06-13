@@ -65,6 +65,8 @@ ifneq (,$(filter native,$(BOARD)))
 	USEMODULE += ltc4150
 	USEMODULE += rtc
 	USEMODULE += config
+	USEMODULE += nativenet
+	USEMODULE += transceiver
 	USEMODULE += random
 endif
 

@@ -93,8 +93,15 @@ void _native_handle_tap_input(void)
                 p.dst = ntohs(frame.field.payload.nn_header.dst);
                 p.rssi = 0;
                 p.lqi = 0;
+#ifdef MODULE_GTIMER
+                gtimer_timeval_t gtimer_now;
+                gtimer_sync_now(&gtimer_now);
+                p.toa.local = gtimer_now.local;
+                p.toa.global = gtimer_now.global;
+#else
                 p.toa.seconds = HWTIMER_TICKS_TO_US(t)/1000000;
                 p.toa.microseconds = HWTIMER_TICKS_TO_US(t)%1000000;
+#endif
                 /* XXX: check overflow */
                 p.length = ntohs(frame.field.payload.nn_header.length);
                 p.data = frame.field.payload.data;
@@ -222,6 +229,12 @@ int8_t send_buf(radio_packet_t *packet)
     memset(buf, 0, sizeof(buf));
 
     DEBUG("send_buf:  Sending packet of length %" PRIu16 " from %" PRIu16 " to %" PRIu16 "\n", packet->length, packet->src, packet->dst);
+#ifdef MODULE_GTIMER
+    gtimer_timeval_t gtimer_now;
+    gtimer_sync_now(&gtimer_now);
+    packet->toa.local = gtimer_now.local;
+    packet->toa.global = gtimer_now.global;
+#endif
     to_send = _native_marshall_ethernet(buf, packet);
 
     DEBUG("send_buf: trying to send %d bytes\n", to_send);
