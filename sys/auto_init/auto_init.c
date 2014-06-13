@@ -68,6 +68,10 @@
 #include "gtimer.h"
 #endif
 
+#ifdef MODULE_CLOCKSYNC_EVAL
+#include "clocksync/clocksync_eval.h"
+#endif
+
 #define ENABLE_DEBUG (0)
 #include "debug.h"
 
@@ -95,6 +99,10 @@ void auto_init(void)
     DEBUG("Auto init gtimer module.\n");
     gtimer_init();
 #endif 
+#ifdef MODULE_CLOCKSYNC_EVAL
+    DEBUG("Auto init clocksync_eval module.\n");
+    clocksync_eval_init();
+#endif
 #ifdef MODULE_RTC
     DEBUG("Auto init rtc module.\n");
     rtc_init();

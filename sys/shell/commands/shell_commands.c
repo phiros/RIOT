@@ -124,6 +124,11 @@ extern void _mersenne_init(int argc, char **argv);
 extern void _mersenne_get(int argc, char **argv);
 #endif
 
+#ifdef MODULE_CLOCKSYNC_EVAL
+extern void _clocksync_eval_handler(int argc, char **argv);
+#endif
+
+
 const shell_command_t _shell_command_list[] = {
     {"reboot", "Reboot the node", _reboot_handler},
 #ifdef MODULE_CONFIG
@@ -192,6 +197,9 @@ const shell_command_t _shell_command_list[] = {
 #ifdef MODULE_RANDOM
     { "mersenne_init", "initializes the PRNG", _mersenne_init },
     { "mersenne_get", "returns 32 bit of pseudo randomness", _mersenne_get },
+#endif
+#ifdef MODULE_CLOCKSYNC_EVAL
+    { "clocksynce", "Configures the clocksync evaluation module", _clocksync_eval_handler },
 #endif
 #ifdef CPU_X86
     {"lspci", "Lists PCI devices", _x86_lspci},

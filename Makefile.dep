@@ -26,6 +26,11 @@ ifneq (,$(filter routing,$(USEMODULE)))
     USEMODULE += sixlowpan
 endif
 
+ifneq (,$(filter clocksync_eval,$(USEMODULE)))
+	USEMODULE += sixlowpan
+	USEMODULE += gtimer
+endif
+
 ifneq (,$(filter sixlowpan,$(USEMODULE)))
     USEMODULE += ieee802154
     USEMODULE += net_help

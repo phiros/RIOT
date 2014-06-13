@@ -36,13 +36,23 @@
 #include "ieee802154_frame.h"
 #include "net_help.h"
 
+#ifdef MODULE_GTSP
+#include "clocksync/gtsp.h"
+#endif
+#ifdef MODULE_CLOCKSYNC_EVAL
+#include "clocksync/clocksync_eval.h"
+#endif
+
+#include "nalp_protocols.h"
+
 #define ENABLE_DEBUG    (0)
 #if ENABLE_DEBUG
 #define DEBUG_ENABLED
 #endif
 #include "debug.h"
 
-#define RADIO_STACK_SIZE            (KERNEL_CONF_STACKSIZE_MAIN)
+//#define RADIO_STACK_SIZE            (KERNEL_CONF_STACKSIZE_MAIN)
+#define RADIO_STACK_SIZE            (KERNEL_CONF_STACKSIZE_PRINTF)
 #define RADIO_RCV_BUF_SIZE          (64)
 #define RADIO_SENDING_DELAY         (1000)
 
@@ -151,9 +161,35 @@ void recv_ieee802154_frame(void)
                 continue;
             }
 
-            /* deliver packet to network(6lowpan)-layer */
-            lowpan_read(frame.payload, length, &src, &dst);
-            /* TODO: get interface ID somehow */
+
+
+			/* If the two most significant bits of the dispatch header are
+			 * either 01, 10 or 11 deliver the frame to the network layer.
+			 * Otherwise this is NOT a sixlowpan packet (see RFC 4944 section
+			 * 5.1 for details).
+			 */
+			uint8_t dispatch_header = frame.payload[0];
+			DEBUG("mac.c: dispatch header check");
+			if((dispatch_header >> 6) & LOWPAN_DISPATCH_HEADER) {
+				puts("lowpan packet");
+				/* deliver packet to network(6lowpan)-layer */
+				lowpan_read(frame.payload, length, &src, &dst);
+				/* TODO: get interface ID somehow */
+			}
+#ifdef MODULE_CLOCKSYNC_EVAL
+			else if(dispatch_header == CLOCKSYNC_EVAL_PROTOCOL_DISPATCH) {
+				// ugly but necessary because of a suspected word alignment bug in gcc-4.8.1
+				gtimer_timeval_t gtimer_toa = p->toa;
+				clocksync_eval_read_trigger(frame.payload, p->src, &gtimer_toa);
+				//clocksync_eval_read_trigger(frame.payload, p);
+			}
+#endif
+#ifdef MODULE_GTSP
+			else if(dispatch_header == GTSP_PROTOCOL_DISPATCH) {
+				DEBUG("gtsp packet");
+				gtsp_mac_read(frame.payload, p);
+			}
+#endif
 
             p->processing--;
         }
