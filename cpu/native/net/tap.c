@@ -57,6 +57,10 @@
 #include "hwtimer.h"
 #include "timex.h"
 
+#ifdef MODULE_GTIMER
+#include "gtimer.h"
+#endif
+
 #define TAP_BUFFER_LENGTH (ETHER_MAX_LEN)
 int _native_marshall_ethernet(uint8_t *framebuf, radio_packet_t *packet);
 

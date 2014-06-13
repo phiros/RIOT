@@ -53,6 +53,8 @@ ifneq (,$(filter msba2,$(BOARD)))
 	USEMODULE += mci
 	USEMODULE += config
 	USEMODULE += random
+	USEMODULE += cc110x_ng
+	USEMODULE += transceiver
 endif
 ifneq (,$(filter avsextrem,$(BOARD)))
 	USEMODULE += rtc
