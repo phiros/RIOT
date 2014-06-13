@@ -93,6 +93,7 @@ void cc110x_rx_handler(void)
         cc110x_rx_buffer[rx_buffer_next].toa = gtimer_toa;
 #endif
 
+
         /* notify transceiver thread if any */
         if (transceiver_pid) {
             msg_t m;
@@ -109,6 +110,7 @@ void cc110x_rx_handler(void)
         return;
     }
     else {
+    	cc110x_statistic.packets_in_crc_fail++;
         /* No ACK received so TOF is unpredictable */
         rflags.TOF = 0;
 
