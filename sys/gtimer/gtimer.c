@@ -30,15 +30,17 @@ static void _gtimer_refresh_last_local(void);
 
 static void _gtimer_now(gtimer_timeval_t *out);
 
-void gtimer_now(timex_t *out) {
+void gtimer_now(timex_t *out)
+{
 	gtimer_timeval_t now;
 	gtimer_sync_now(&now);
 	timex_t result = timex_from_uint64(now.global);
 	*out = result;
 }
 
-void gtimer_init(void) {
-    DEBUG("gtimer_init()\n");
+void gtimer_init(void)
+{
+	DEBUG("gtimer_init()\n");
 	timex_t now;
 	vtimer_now(&now);
 	mutex_init(&gtimer_mutex);
@@ -47,42 +49,49 @@ void gtimer_init(void) {
 	gtimer_last.rate = 0.0;
 }
 
-void gtimer_sync_now(gtimer_timeval_t *out) {
+void gtimer_sync_now(gtimer_timeval_t *out)
+{
 	mutex_lock(&gtimer_mutex);
 	_gtimer_now(out);
 	mutex_unlock(&gtimer_mutex);
 }
 
-void gtimer_sync_set_global_offset(uint64_t global_offset) {
+void gtimer_sync_set_global_offset(uint64_t global_offset)
+{
 	mutex_lock(&gtimer_mutex);
 	_gtimer_refresh_last_local();
 	gtimer_last.global += global_offset;
 	mutex_unlock(&gtimer_mutex);
 }
 
-void gtimer_sync_set_relative_rate(float rate) {
+void gtimer_sync_set_relative_rate(float rate)
+{
 	mutex_lock(&gtimer_mutex);
 	_gtimer_refresh_last_local();
 	gtimer_last.rate = rate;
 	mutex_unlock(&gtimer_mutex);
 }
 
-float gtimer_sync_get_relative_rate(void) {
+float gtimer_sync_get_relative_rate(void)
+{
 	return gtimer_last.rate;
 }
 
-static void _gtimer_now(gtimer_timeval_t *out) {
+static void _gtimer_now(gtimer_timeval_t *out)
+{
 	uint64_t now;
 	timex_t temp;
 	vtimer_now(&temp);
 	now = timex_uint64(temp);
 	DEBUG("clockrate multiply: %"PRIu64 "\n", ((now - gtimer_last.local) * gtimer_last.rate));
 	out->global = gtimer_last.global
-			+ (((now - gtimer_last.local) * gtimer_last.rate) + (now - gtimer_last.local));
+			+ (((now - gtimer_last.local) * gtimer_last.rate)
+					+ (now - gtimer_last.local));
 	out->local = now;
 }
 
-static void _gtimer_refresh_last_local(void) {
+static void _gtimer_refresh_last_local(void)
+{
 	gtimer_timeval_t now;
 	_gtimer_now(&now);
 	gtimer_last = now;

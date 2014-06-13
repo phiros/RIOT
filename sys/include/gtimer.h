@@ -22,7 +22,8 @@
 #include <vtimer.h>
 #include <stdint.h>
 
-typedef struct {
+typedef struct
+{
 	uint64_t local;
 	uint64_t global;
 	float rate;
