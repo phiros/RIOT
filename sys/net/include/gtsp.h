@@ -94,21 +94,4 @@ void gtsp_mac_read(uint8_t *frame_payload, radio_packet_t *p);
  */
 void gtsp_driver_timestamp(uint8_t *ieee802154_frame, uint8_t frame_length);
 
-#ifdef GTSP_ENABLE_TRIGGER
-/**
- * @brief adds a source address to the set of trigger addresses.
- */
-void gtsp_add_trigger_address(uint8_t src);
-
-/**
- * @brief deletes a source address to the set of trigger addresses.
- */
-void gtsp_del_trigger_address(uint8_t src);
-
-/**
- * @brief prints the list of stored trigger addresses.
- */
-void gtsp_print_trigger(void);
-#endif
-
 #endif /* __GTSP_H */

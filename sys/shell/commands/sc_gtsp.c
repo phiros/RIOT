@@ -40,38 +40,11 @@ void _gtsp(int argc, char **argv)
             gtsp_pause();
             return;
         }
-#ifdef GTSP_ENABLE_TRIGGER
-        if (!strcmp(argv[1], "trigger"))
-        {
-            gtsp_print_trigger();
-            return;
-        }
     }
-    else if (argc == 4)
-    {
-        if (!strcmp(argv[1], "trigger"))
-        {
-            int16_t a = atoi(argv[3]);
-            if (!strcmp(argv[2], "rm"))
-            {
-                gtsp_del_trigger_address((uint8_t) a);
-                return;
-            }
-
-            if (!strcmp(argv[2], "add"))
-            {
-                gtsp_add_trigger_address((uint8_t) a);
-                return;
-            }
-        }
-    }
-#else
-    }
-#endif
     _print_help();
 }
 
 static void _print_help(void)
 {
-    printf("Usage: gtsp [on] | [off] | [trigger [rm|add address]]  \n");
+    printf("Usage: gtsp [on] | [off]\n");
 }

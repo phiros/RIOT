@@ -68,13 +68,6 @@ char gtsp_beacon_buffer[GTSP_BEACON_BUFFER_SIZE] =
 generic_ringbuffer_t gtsp_rb;
 gtsp_sync_point_t gtsp_grb_buffer[GTSP_MAX_NEIGHBORS];
 
-#ifdef GTSP_ENABLE_TRIGGER
-#include "bitvector.h"
-uint8_t _gtsp_trigger_sources[BITVECTOR_SIZE];
-
-//#define GTSP_PRINT64U(val) l2s((long long unsigned int) val, X64LL_UNSIGNED)
-#endif
-
 mutex_t gtsp_mutex;
 
 void gtsp_init(void)
@@ -88,10 +81,6 @@ void gtsp_init(void)
     mutex_init(&gtsp_mutex);
     grb_ringbuffer_init(&gtsp_rb, (char *) &gtsp_grb_buffer, GTSP_MAX_NEIGHBORS,
             sizeof(gtsp_sync_point_t));
-
-#ifdef GTSP_ENABLE_TRIGGER
-    bitvector_init(_gtsp_trigger_sources);
-#endif
 
     _gtsp_beacon_pid = thread_create(gtsp_beacon_stack, GTSP_BEACON_STACK_SIZE,
     PRIORITY_MAIN - 2, CREATE_STACKTEST, _gtsp_beacon_thread, "gtsp_beacon");
@@ -214,16 +203,6 @@ void gtsp_mac_read(uint8_t *frame_payload, radio_packet_t *p)
     float relative_rate = 0.0f;
     gtsp_beacon_t *gtsp_beacon = (gtsp_beacon_t *) frame_payload;
 
-#ifdef GTSP_ENABLE_TRIGGER
-    if(bitvector_is_member(_gtsp_trigger_sources, p->src))
-    {
-        printf("### event:trigger_received, from: %" PRIu16 ",", p->src);
-        printf(" toa_local: %s,", l2s(toa.local, X64LL_SIGNED));
-        printf(" toa_global: %s,", l2s(toa.global, X64LL_SIGNED));
-        printf(" remote_local: %s,", l2s(gtsp_beacon->local, X64LL_SIGNED));
-        printf(" remote_global: %s\n", l2s(gtsp_beacon->global, X64LL_SIGNED));
-    }
-#endif
     if (_gtsp_pause)
     {
         mutex_unlock(&gtsp_mutex);
@@ -334,29 +313,3 @@ static int _gtsp_buffer_lookup(generic_ringbuffer_t *rb, uint16_t src)
     }
     return -1;
 }
-
-#ifdef GTSP_ENABLE_TRIGGER
-void gtsp_add_trigger_address(uint8_t src)
-{
-    bitvector_add(_gtsp_trigger_sources, src);
-}
-
-void gtsp_del_trigger_address(uint8_t src)
-{
-    bitvector_remove(_gtsp_trigger_sources, src);
-}
-
-void gtsp_print_trigger(void)
-{
-    printf("trigger: ");
-    for(uint8_t i=0; i<255; i++)
-    {
-        if(bitvector_is_member(_gtsp_trigger_sources, i))
-        {
-            printf("%"PRIu8 " ", i);
-        }
-    }
-    printf("\n");
-}
-#endif
-
