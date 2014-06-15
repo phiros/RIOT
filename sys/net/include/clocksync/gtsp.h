@@ -30,8 +30,6 @@
 #include "gtimer.h"
 #include "radio/types.h"
 
-#define ABS64T(X)   ((X) < 0 ? -1*(X) : (X)) // not sure...
-
 typedef struct  __attribute__((packed)) {
 	uint8_t dispatch_marker; // << protocol marker
     uint64_t local; // << sender hardware time
