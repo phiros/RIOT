@@ -133,7 +133,7 @@ static float gtsp_compute_rate(void)
 {
     DEBUG("gtsp_compute_rate\n");
     float avg_rate = gtimer_sync_get_relative_rate();
-    float avg_offset = 0;
+    int64_t sum_offset = 0;
     int offset_count = 0;
     int neighbor_count = 0;
     gtsp_sync_point_t beacon;
@@ -150,24 +150,16 @@ static float gtsp_compute_rate(void)
         neighbor_count++;
         avg_rate += last_rcvd_beacon->relative_rate;
 
-        if (offset > 0)
+        if (offset > - _gtsp_jump_threshold)
         {
             // neighbor is ahead in time
-            avg_offset += 1 * offset;
+            sum_offset += offset;
             offset_count++;
-        }
-        else
-        {
-            if (ABS64T(offset) < _gtsp_jump_threshold)
-            {
-                avg_offset += offset;
-                offset_count++;
-            }
         }
     }
     if (offset_count > 0 && !gtsp_jumped)
     {
-        int64_t correction = ceilf(avg_offset / (offset_count + 1));
+        int64_t correction = sum_offset / (offset_count + 1);
         if (ABS64T(correction) < _gtsp_jump_threshold)
         {
             gtimer_sync_set_global_offset(correction);
