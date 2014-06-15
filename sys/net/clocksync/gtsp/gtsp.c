@@ -15,12 +15,11 @@
 
 #include <stdint.h>
 #include <stdio.h>
+#include <stdbool.h>
 #include <string.h>
 #include <math.h>
-#include <thread.h>
-#include <stdbool.h>
 
-#include "transceiver.h"
+#include "thread.h"
 #include "timex.h"
 #include "vtimer.h"
 #include "mutex.h"
@@ -28,11 +27,10 @@
 #include "sixlowpan/mac.h"
 #include "malloc.h"
 
+#include "clocksync/gtsp.h"
 #include "gtimer.h"
-#include "gtsp.h"
 #include "nalp_protocols.h"
 #include "generic_ringbuffer.h"
-#include "x64toa.h"
 
 #define ENABLE_DEBUG (0)
 #include <debug.h>
@@ -72,12 +70,6 @@ mutex_t gtsp_mutex;
 
 void gtsp_init(void)
 {
-    if (transceiver_pid < 0)
-    {
-        puts("GTSP error: Transceiver not initialized!");
-        return;
-    }
-
     mutex_init(&gtsp_mutex);
     grb_ringbuffer_init(&gtsp_rb, (char *) &gtsp_grb_buffer, GTSP_MAX_NEIGHBORS,
             sizeof(gtsp_sync_point_t));

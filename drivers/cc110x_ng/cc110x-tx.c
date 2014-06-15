@@ -23,7 +23,7 @@
 
 #undef REFRESHTIMESTAMP
 #ifdef MODULE_GTSP
-#include "gtsp.h"
+#include "clocksync/gtsp.h"
 #define REFRESHTIMESTAMP gtsp_driver_timestamp
 #endif
 

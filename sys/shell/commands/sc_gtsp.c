@@ -20,7 +20,7 @@
 #include <string.h>
 #include <inttypes.h>
 
-#include "gtsp.h"
+#include "clocksync/gtsp.h"
 
 static void _print_help(void);
 
