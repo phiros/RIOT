@@ -92,193 +92,217 @@ mutex_t clocksync_eval_mutex;
 
 void clocksync_eval_init(void)
 {
-	mutex_init(&clocksync_eval_mutex);
+    mutex_init(&clocksync_eval_mutex);
 
-	_clocksync_eval_beacon_pid = thread_create(clocksync_eval_beacon_stack,
-	CLOCKSYNC_EVAL_BEACON_STACK_SIZE, PRIORITY_MAIN - 2, CREATE_STACKTEST,
-			_clocksync_eval_beacon_send_thread, "clocksync_eval_beacon");
-	_clocksync_eval_heartbeat_pid = thread_create(
-			clocksync_eval_heartbeat_stack,
-			CLOCKSYNC_EVAL_HEARTBEAT_STACK_SIZE,
-			PRIORITY_MAIN - 2, CREATE_STACKTEST,
-			_clocksync_eval_heartbeat_thread, "clocksync_eval_heartbeat");
+    _clocksync_eval_beacon_pid = thread_create(clocksync_eval_beacon_stack,
+    CLOCKSYNC_EVAL_BEACON_STACK_SIZE, PRIORITY_MAIN - 2, CREATE_STACKTEST,
+            _clocksync_eval_beacon_send_thread, "clocksync_eval_beacon");
+/*
+    _clocksync_eval_heartbeat_pid = thread_create(
+            clocksync_eval_heartbeat_stack,
+            CLOCKSYNC_EVAL_HEARTBEAT_STACK_SIZE,
+            PRIORITY_MAIN - 2, CREATE_STACKTEST,
+            _clocksync_eval_heartbeat_thread, "clocksync_eval_heartbeat");
+*/
 
-	thread_create(clocksync_eval_cyclic_beacon_stack,
-	CLOCKSYNC_EVAL_CYCLIC_BEACON_STACK_SIZE,
-	PRIORITY_MAIN - 2, CREATE_STACKTEST,
-			_clocksync_eval_cyclic_driver_thread_beacon,
-			"clocksync_eval_driver_beacon");
-	thread_create(clocksync_eval_cyclic_heartbeat_stack,
-	CLOCKSYNC_EVAL_CYCLIC_HEARTBEAT_STACK_SIZE,
-	PRIORITY_MAIN - 2, CREATE_STACKTEST,
-			_clocksync_eval_cyclic_driver_thread_heartbeat,
-			"clocksync_eval_driver_heartbeat");
+    thread_create(clocksync_eval_cyclic_beacon_stack,
+    CLOCKSYNC_EVAL_CYCLIC_BEACON_STACK_SIZE,
+    PRIORITY_MAIN - 2, CREATE_STACKTEST,
+            _clocksync_eval_cyclic_driver_thread_beacon,
+            "clocksync_eval_driver_beacon");
+    /*
+    thread_create(clocksync_eval_cyclic_heartbeat_stack,
+    CLOCKSYNC_EVAL_CYCLIC_HEARTBEAT_STACK_SIZE,
+    PRIORITY_MAIN - 2, CREATE_STACKTEST,
+            _clocksync_eval_cyclic_driver_thread_heartbeat,
+            "clocksync_eval_driver_heartbeat");
+            */
 }
 
 void clocksync_eval_read_trigger(uint8_t *payload, uint16_t src,
-		gtimer_timeval_t *gtimer_toa)
+        gtimer_timeval_t *gtimer_toa)
 {
-	mutex_lock(&clocksync_eval_mutex);
-	DEBUG("clocksync_eval_read_trigger");
-	clocksync_eval_beacon_t *beacon = (clocksync_eval_beacon_t *) payload;
-	printf("### event:trigger_received, from: %" PRIu16 ",", src);
-	printf(" remote_counter: %"PRIu32",", beacon->counter);
-	printf(" toa_local: %s,", l2s(gtimer_toa->local, X64LL_SIGNED));
-	printf(" toa_global: %s\n", l2s(gtimer_toa->global, X64LL_SIGNED));
-	mutex_unlock(&clocksync_eval_mutex);
+    mutex_lock(&clocksync_eval_mutex);
+    DEBUG("clocksync_eval_read_trigger");
+    clocksync_eval_beacon_t *beacon = (clocksync_eval_beacon_t *) payload;
+    printf("### event:trigger_received, from: %" PRIu16 ",", src);
+    printf(" remote_counter: %"PRIu32",", beacon->counter);
+    printf(" toa_local: %s,", l2s(gtimer_toa->local, X64LL_SIGNED));
+    printf(" toa_global: %s\n", l2s(gtimer_toa->global, X64LL_SIGNED));
+    mutex_unlock(&clocksync_eval_mutex);
 }
 
 void clocksync_eval_set_beacon_interval(uint32_t lower_delay_in_ms,
-		uint32_t jitter_in_ms)
+        uint32_t jitter_in_ms)
 {
-	_clocksync_eval_beacon_interval_jitter = jitter_in_ms;
-	_clocksync_eval_beacon_interval_lower = lower_delay_in_ms;
+    _clocksync_eval_beacon_interval_jitter = jitter_in_ms;
+    _clocksync_eval_beacon_interval_lower = lower_delay_in_ms;
 }
 
 void clocksync_eval_set_heartbeat_interval(uint32_t delay_in_ms)
 {
-	_clocksync_eval_heartbeat_interval = delay_in_ms * 1000;
+    _clocksync_eval_heartbeat_interval = delay_in_ms * 1000;
 }
 
 void clocksync_eval_pause_sending(void)
 {
-	_clocksync_eval_beacon_pause = true;
-	DEBUG("clocksync_eval beacon sending off");
+    _clocksync_eval_beacon_pause = true;
+    DEBUG("clocksync_eval beacon sending off");
 }
 
 void clocksync_eval_resume_sending(void)
 {
-	genrand_init((uint32_t) _clocksync_eval_get_trans_addr());
+    genrand_init((uint32_t) _clocksync_eval_get_trans_addr());
 
-	_clocksync_eval_beacon_pause = false;
-	DEBUG("clocksync_eval beacon sending on");
+    _clocksync_eval_beacon_pause = false;
+    DEBUG("clocksync_eval beacon sending on");
 }
 
 void clocksync_eval_pause_heartbeat(void)
 {
-	_clocksync_eval_heartbeat_pause = true;
-	DEBUG("clocksync_eval heartbeat off");
+    _clocksync_eval_heartbeat_pause = true;
+    DEBUG("clocksync_eval heartbeat off");
 }
 
 void clocksync_eval_resume_heartbeat(void)
 {
-	_clocksynce_eval_transceiver_addr = _clocksync_eval_get_trans_addr();
-	_clocksync_eval_heartbeat_pause = false;
-	DEBUG("clocksync_eval heartbeat on");
+    _clocksynce_eval_transceiver_addr = _clocksync_eval_get_trans_addr();
+    _clocksync_eval_heartbeat_pause = false;
+    DEBUG("clocksync_eval heartbeat on");
 }
 
 static void _clocksync_eval_beacon_send_thread(void)
 {
-	while (1)
-	{
-		DEBUG("_clocksync_eval_beacon_send_thread: sleeping\n");
-		thread_sleep();
-		DEBUG("_clocksync_eval_beacon_send_thread: woke up\n");
-		if (!_clocksync_eval_beacon_pause)
-		{
-			mutex_lock(&clocksync_eval_mutex);
-			_clocksync_eval_send_beacon();
-			_clocksync_eval_beacon_interval =
-					(_clocksync_eval_beacon_interval_lower
-							+ genrand_uint32()
-									% _clocksync_eval_beacon_interval_jitter)
-							* 1000;
-			DEBUG("_clocksync_eval_beacon_send_thread: new beacon interval: %"PRIu32 "\n",
-					_clocksync_eval_beacon_interval);
-			mutex_unlock(&clocksync_eval_mutex);
-		}
-	}
+    while (1)
+    {
+        DEBUG("_clocksync_eval_beacon_send_thread: sleeping\n");
+        thread_sleep();
+        DEBUG("_clocksync_eval_beacon_send_thread: woke up\n");
+        if (!_clocksync_eval_beacon_pause)
+        {
+            mutex_lock(&clocksync_eval_mutex);
+            _clocksync_eval_send_beacon();
+            if (!_clocksync_eval_heartbeat_pause)
+            {
+                //mutex_lock(&clocksync_eval_mutex);
+                gtimer_timeval_t now;
+                gtimer_sync_now(&now);
+                printf("### event:heartbeat,");
+                printf(" address: %"PRIu16 ",",
+                        _clocksynce_eval_transceiver_addr);
+                printf(" gtimer_local: %s,", l2s(now.local, X64LL_SIGNED));
+                printf(" gtimer_global: %s,", l2s(now.global, X64LL_SIGNED));
+                printf(" gtimer_rate: %f", now.rate);
+#ifdef MODULE_CC110X_NG
+                printf(", pkt_in: %"PRIu32, cc110x_statistic.packets_in);
+                printf(", pkt_out: %"PRIu32, cc110x_statistic.raw_packets_out);
+                printf(", crc: %"PRIu32, cc110x_statistic.packets_in_crc_fail);
+                printf(", snd_while_rx: %"PRIu32, cc110x_statistic.packets_in_while_tx);
+#endif
+                printf("\n");
+                //mutex_unlock(&clocksync_eval_mutex);
+            }
+            _clocksync_eval_beacon_interval =
+                    (_clocksync_eval_beacon_interval_lower
+                            + genrand_uint32()
+                                    % _clocksync_eval_beacon_interval_jitter)
+                            * 1000;
+            DEBUG("_clocksync_eval_beacon_send_thread: new beacon interval: %"PRIu32 "\n",
+                    _clocksync_eval_beacon_interval);
+            mutex_unlock(&clocksync_eval_mutex);
+        }
+    }
 }
 
 static void _clocksync_eval_heartbeat_thread(void)
 {
-	while (1)
-	{
-		DEBUG("_clocksync_eval_beacon_heartbeat_thread: sleeping\n");
-		thread_sleep();
-		DEBUG("_clocksync_eval_beacon_heartbeat_thread: woke up\n");
-		if (!_clocksync_eval_heartbeat_pause)
-		{
-			mutex_lock(&clocksync_eval_mutex);
-			gtimer_timeval_t now;
-			gtimer_sync_now(&now);
-			printf("### event:heartbeat,");
-			printf(" address: %"PRIu16 ",", _clocksynce_eval_transceiver_addr);
-			printf(" gtimer_local: %s,", l2s(now.local, X64LL_SIGNED));
-			printf(" gtimer_global: %s,", l2s(now.global, X64LL_SIGNED));
-			printf(" gtimer_rate: %f", now.rate);
+    while (1)
+    {
+        DEBUG("_clocksync_eval_beacon_heartbeat_thread: sleeping\n");
+        thread_sleep();
+        DEBUG("_clocksync_eval_beacon_heartbeat_thread: woke up\n");
+        if (!_clocksync_eval_heartbeat_pause)
+        {
+            mutex_lock(&clocksync_eval_mutex);
+            gtimer_timeval_t now;
+            gtimer_sync_now(&now);
+            printf("### event:heartbeat,");
+            printf(" address: %"PRIu16 ",", _clocksynce_eval_transceiver_addr);
+            printf(" gtimer_local: %s,", l2s(now.local, X64LL_SIGNED));
+            printf(" gtimer_global: %s,", l2s(now.global, X64LL_SIGNED));
+            printf(" gtimer_rate: %f", now.rate);
 #ifdef MODULE_CC110X_NG
-			printf(", pkt_in: %"PRIu32, cc110x_statistic.packets_in);
-			printf(", pkt_out: %"PRIu32, cc110x_statistic.raw_packets_out);
-			printf(", crc: %"PRIu32, cc110x_statistic.packets_in_crc_fail);
-			printf(", snd_while_rx: %"PRIu32, cc110x_statistic.packets_in_while_tx);
+            printf(", pkt_in: %"PRIu32, cc110x_statistic.packets_in);
+            printf(", pkt_out: %"PRIu32, cc110x_statistic.raw_packets_out);
+            printf(", crc: %"PRIu32, cc110x_statistic.packets_in_crc_fail);
+            printf(", snd_while_rx: %"PRIu32, cc110x_statistic.packets_in_while_tx);
 #endif
-			printf("\n");
-			mutex_unlock(&clocksync_eval_mutex);
-		}
-	}
+            printf("\n");
+            mutex_unlock(&clocksync_eval_mutex);
+        }
+    }
 }
 
 static void _clocksync_eval_cyclic_driver_thread_beacon(void)
 {
-	while (1)
-	{
-		vtimer_usleep(_clocksync_eval_beacon_interval);
-		if (!_clocksync_eval_beacon_pause)
-		{
-			DEBUG(
-					"_clocksync_eval_cyclic_driver_thread: waking sender thread up");
-			thread_wakeup(_clocksync_eval_beacon_pid);
-		}
-	}
+    while (1)
+    {
+        vtimer_usleep(_clocksync_eval_beacon_interval);
+        if (!_clocksync_eval_beacon_pause)
+        {
+            DEBUG(
+                    "_clocksync_eval_cyclic_driver_thread: waking sender thread up");
+            thread_wakeup(_clocksync_eval_beacon_pid);
+        }
+    }
 }
 
 static void _clocksync_eval_cyclic_driver_thread_heartbeat(void)
 {
-	while (1)
-	{
-		vtimer_usleep(_clocksync_eval_heartbeat_interval);
-		if (!_clocksync_eval_heartbeat_pause)
-		{
-			DEBUG(
-					"_clocksync_eval_cyclic_driver_thread_heartbeat: waking sender thread up");
-			thread_wakeup(_clocksync_eval_heartbeat_pid);
-		}
-	}
+    while (1)
+    {
+        vtimer_usleep(_clocksync_eval_heartbeat_interval);
+        if (!_clocksync_eval_heartbeat_pause)
+        {
+            DEBUG(
+                    "_clocksync_eval_cyclic_driver_thread_heartbeat: waking sender thread up");
+            thread_wakeup(_clocksync_eval_heartbeat_pid);
+        }
+    }
 }
 
 static void _clocksync_eval_send_beacon(void)
 {
-	DEBUG("_clocksync_eval_send_beacon\n");
-	gtimer_timeval_t now;
-	clocksync_eval_beacon_t *clocksync_eval_beacon =
-			(clocksync_eval_beacon_t *) clocksync_eval_beacon_buffer;
-	gtimer_sync_now(&now);
-	memset(clocksync_eval_beacon_buffer, 0, sizeof(clocksync_eval_beacon_t));
-	clocksync_eval_beacon->dispatch_marker = CLOCKSYNC_EVAL_PROTOCOL_DISPATCH;
-	clocksync_eval_beacon->counter = _clocksync_eval_beacon_counter;
-	sixlowpan_mac_send_ieee802154_frame(0, NULL, 8,
-			clocksync_eval_beacon_buffer, sizeof(clocksync_eval_beacon_t), 1);
-	_clocksync_eval_beacon_counter++;
+    DEBUG("_clocksync_eval_send_beacon\n");
+    gtimer_timeval_t now;
+    clocksync_eval_beacon_t *clocksync_eval_beacon =
+            (clocksync_eval_beacon_t *) clocksync_eval_beacon_buffer;
+    gtimer_sync_now(&now);
+    memset(clocksync_eval_beacon_buffer, 0, sizeof(clocksync_eval_beacon_t));
+    clocksync_eval_beacon->dispatch_marker = CLOCKSYNC_EVAL_PROTOCOL_DISPATCH;
+    clocksync_eval_beacon->counter = _clocksync_eval_beacon_counter;
+    sixlowpan_mac_send_ieee802154_frame(0, NULL, 8,
+            clocksync_eval_beacon_buffer, sizeof(clocksync_eval_beacon_t), 1);
+    _clocksync_eval_beacon_counter++;
 }
 
 static uint16_t _clocksync_eval_get_trans_addr(void)
 {
-	msg_t mesg;
-	transceiver_command_t tcmd;
-	radio_address_t a;
+    msg_t mesg;
+    transceiver_command_t tcmd;
+    radio_address_t a;
 
-	if (transceiver_pid < 0)
-	{
-		puts("Transceiver not initialized");
-		return 1;
-	}
+    if (transceiver_pid < 0)
+    {
+        puts("Transceiver not initialized");
+        return 1;
+    }
 
-	tcmd.transceivers = _TC_TYPE;
-	tcmd.data = &a;
-	mesg.content.ptr = (char *) &tcmd;
-	mesg.type = GET_ADDRESS;
+    tcmd.transceivers = _TC_TYPE;
+    tcmd.data = &a;
+    mesg.content.ptr = (char *) &tcmd;
+    mesg.type = GET_ADDRESS;
 
-	msg_send_receive(&mesg, &mesg, transceiver_pid);
-	return a;
+    msg_send_receive(&mesg, &mesg, transceiver_pid);
+    return a;
 }

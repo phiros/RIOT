@@ -41,7 +41,7 @@
 
 #define LPC2387_FLOAT_CALC_TIME (10)
 #define GTSP_MAX_NEIGHBORS (10)
-#define GTSP_BEACON_INTERVAL (5 * 1000 * 1000)
+#define GTSP_BEACON_INTERVAL (30 * 1000 * 1000)
 #define GTSP_JUMP_THRESHOLD (10)
 #define GTSP_MOVING_ALPHA 0.9
 
@@ -78,8 +78,8 @@ void gtsp_init(void)
     PRIORITY_MAIN - 2, CREATE_STACKTEST, _gtsp_beacon_thread, "gtsp_beacon");
 
     _gtsp_clock_pid = thread_create(gtsp_cyclic_stack, GTSP_CYCLIC_STACK_SIZE,
-            PRIORITY_MAIN - 2,
-            CREATE_STACKTEST, _gtsp_cyclic_driver_thread, "gtsp_cyclic_driver");
+    PRIORITY_MAIN - 2,
+    CREATE_STACKTEST, _gtsp_cyclic_driver_thread, "gtsp_cyclic_driver");
 
     puts("GTSP initialized");
 }
@@ -277,15 +277,18 @@ void gtsp_resume(void)
 
 void gtsp_driver_timestamp(uint8_t *ieee802154_frame, uint8_t frame_length)
 {
-    gtimer_timeval_t now;
-    ieee802154_frame_t frame;
-    uint8_t hdrlen = ieee802154_frame_read(ieee802154_frame, &frame,
-            frame_length);
-    gtsp_beacon_t *beacon = (gtsp_beacon_t *) frame.payload;
-    gtimer_sync_now(&now);
-    beacon->local = now.local;
-    beacon->global = now.global;
-    memcpy(ieee802154_frame + hdrlen, beacon, sizeof(gtsp_beacon_t));
+    if (ieee802154_frame[0] == GTSP_PROTOCOL_DISPATCH)
+    {
+        gtimer_timeval_t now;
+        ieee802154_frame_t frame;
+        uint8_t hdrlen = ieee802154_frame_read(ieee802154_frame, &frame,
+                frame_length);
+        gtsp_beacon_t *beacon = (gtsp_beacon_t *) frame.payload;
+        gtimer_sync_now(&now);
+        beacon->local = now.local;
+        beacon->global = now.global;
+        memcpy(ieee802154_frame + hdrlen, beacon, sizeof(gtsp_beacon_t));
+    }
 }
 
 static int _gtsp_buffer_lookup(generic_ringbuffer_t *rb, uint16_t src)
