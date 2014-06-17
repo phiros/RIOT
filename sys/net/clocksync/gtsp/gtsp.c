@@ -160,7 +160,7 @@ static float gtsp_compute_rate(void)
     if (offset_count > 0 && !gtsp_jumped)
     {
         int64_t correction = sum_offset / (offset_count + 1);
-        if (ABS64T(correction) < _gtsp_jump_threshold)
+        if (correction < _gtsp_jump_threshold)
         {
             gtimer_sync_set_global_offset(correction);
         }
