@@ -26,6 +26,10 @@
 #include "clocksync/gtsp.h"
 #define REFRESHTIMESTAMP gtsp_driver_timestamp
 #endif
+#ifdef MODULE_FTSP
+#include "clocksync/ftsp.h"
+#define REFRESHTIMESTAMP ftsp_driver_timestamp
+#endif
 
 #include "irq.h"
 

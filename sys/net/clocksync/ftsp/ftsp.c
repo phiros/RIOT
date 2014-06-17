@@ -5,9 +5,9 @@
  * Public License. See the file LICENSE in the top level directory for more
  * details.
  *
- * @ingroup gtsp
+ * @ingroup ftsp
  * @{
- * @file    gtsp.c
+ * @file    ftsp.c
  * @author  Philipp Rosenkranz <philipp.rosenkranz@fu-berlin.de>
  * @author  Daniel Jentsch <d.jentsch@fu-berlin.de>
  * @}
@@ -176,9 +176,10 @@ static float gtsp_compute_rate(void)
     return avg_rate;
 }
 
-void gtsp_mac_read(uint8_t *frame_payload, uint16_t src, gtimer_timeval_t toa)
+void gtsp_mac_read(uint8_t *frame_payload, radio_packet_t *p)
 {
     DEBUG("gtsp_mac_read");
+    gtimer_timeval_t toa = p->toa;
     mutex_lock(&gtsp_mutex);
     gtsp_sync_point_t new_sync_point;
     gtsp_sync_point_t *sync_point;
@@ -194,8 +195,8 @@ void gtsp_mac_read(uint8_t *frame_payload, uint16_t src, gtimer_timeval_t toa)
 
     int buffer_index;
     // check for previously received beacons from the same node
-    DEBUG("gtsp_mac_read: Looking up src address: %" PRIu16 "\n", src);
-    if (-1 != (buffer_index = _gtsp_buffer_lookup(&gtsp_rb, src)))
+    DEBUG("gtsp_mac_read: Looking up p->src address: %" PRIu16 "\n", p->src);
+    if (-1 != (buffer_index = _gtsp_buffer_lookup(&gtsp_rb, p->src)))
     {
         DEBUG("gtsp_mac_read: _gtsp_buffer_lookup success!");
         grb_get_element(&gtsp_rb, (void **) &sync_point, buffer_index);
@@ -218,7 +219,7 @@ void gtsp_mac_read(uint8_t *frame_payload, uint16_t src, gtimer_timeval_t toa)
         // create a new sync_point and add it to the ring buffer
         buffer_index = grb_add_element(&gtsp_rb, &new_sync_point);
         grb_get_element(&gtsp_rb, (void **) &sync_point, buffer_index);
-        sync_point->src = src;
+        sync_point->src = p->src;
     }
 
     // store the received and calculated data in the sync point

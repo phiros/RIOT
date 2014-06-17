@@ -76,6 +76,10 @@
 #include "clocksync/gtsp.h"
 #endif
 
+#ifdef MODULE_FTSP
+#include "clocksync/ftsp.h"
+#endif
+
 #define ENABLE_DEBUG (0)
 #include "debug.h"
 

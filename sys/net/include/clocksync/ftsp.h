@@ -1,5 +1,5 @@
 /**
- * gtsp.h - Declarations and types for the Gradient Time Synchronisation Protocol.
+ * ftsp.h - Declarations and types for the Gradient Time Synchronisation Protocol.
  *
  * Copyright (C) 2014  Philipp Rosenkranz
  *
@@ -9,7 +9,7 @@
  */
 
 /**
- * @defgroup gtsp    GTSP - Gradient Time Synchronisation Protocol.
+ * @defgroup ftsp    FTSP - Gradient Time Synchronisation Protocol.
  * @ingroup  net
  * @brief    The Gradient Clock Synchronization Protocol is a decentralized clock
  *           synchronization protocol which tries to synchronizes not only the
@@ -18,13 +18,13 @@
  *              Sommer et.al.: Gradient Clock Synchronization in Wireless Sensor Networks
  *           </a>
  * @{
- * @file     gtsp.h
+ * @file     ftsp.h
  * @brief    Declarations for the Gradient Clock Synchronization Protocol.
  * @author   Philipp Rosenkranz <philipp.rosenkranz@fu-berlin.de>
  * @}
  */
-#ifndef __GTSP_H
-#define __GTSP_H
+#ifndef __FTSP_H
+#define __FTSP_H
 
 #include "generic_ringbuffer.h"
 #include "gtimer.h"
@@ -37,7 +37,7 @@ typedef struct  __attribute__((packed)) {
     uint64_t local; // << sender hardware time
     uint64_t global; // << sender logical time
     float relative_rate; // << sender logical clockrate
-} gtsp_beacon_t;
+} ftsp_beacon_t;
 
 
 typedef struct {
@@ -48,17 +48,17 @@ typedef struct {
 	uint64_t remote_global; // << sender global time when message was sent
 	float remote_rate; // << sender current clock rate correction factor
 	float relative_rate; // << current local clock rate relative to sender
-} gtsp_sync_point_t;
+} ftsp_sync_point_t;
 
 /**
- * @brief Starts the GTSP module
+ * @brief Starts the FTSP module
  */
-void gtsp_init(void);
+void ftsp_init(void);
 
 /**
  * @brief sets the beacon interval in seconds.
  */
-void gtsp_set_beacon_delay(uint32_t delay_in_sec);
+void ftsp_set_beacon_delay(uint32_t delay_in_sec);
 
 /**
  * @brief sets the minimal delay between sending and receiving a beacon.
@@ -69,29 +69,29 @@ void gtsp_set_beacon_delay(uint32_t delay_in_sec);
  * This delay has to be determined for every platform (read: for different MCU /
  * transceiver combinations).
  */
-void gtsp_set_prop_time(uint32_t us);
+void ftsp_set_prop_time(uint32_t us);
 
 /**
- * @brief Causes gtsp to stop sending beacons / ignoring received beacons.
+ * @brief Causes ftsp to stop sending beacons / ignoring received beacons.
  */
-void gtsp_pause(void);
+void ftsp_pause(void);
 
 /**
- * @brief Causes gtsp to restart/start sending beacons and processing received beacons.
+ * @brief Causes ftsp to restart/start sending beacons and processing received beacons.
  */
-void gtsp_resume(void);
+void ftsp_resume(void);
 
 /**
  * @brief reads a frame supplied by the mac layer of sixlowpan.
  * This function should only be called by mac.c
  */
-void gtsp_mac_read(uint8_t *frame_payload, uint16_t src, gtimer_timeval_t toa);
+void ftsp_mac_read(uint8_t *frame_payload, uint16_t src, gtimer_timeval_t);
 
 /**
  * @brief Refreshes the timestamp in a frame.
  * This function is executed shortly before transmitting a packet.
  * The function should only be executed by a transceiver driver.
  */
-void gtsp_driver_timestamp(uint8_t *ieee802154_frame, uint8_t frame_length);
+void ftsp_driver_timestamp(uint8_t *ieee802154_frame, uint8_t frame_length);
 
-#endif /* __GTSP_H */
+#endif /* __FTSP_H */

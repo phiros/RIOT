@@ -39,6 +39,9 @@
 #ifdef MODULE_GTSP
 #include "clocksync/gtsp.h"
 #endif
+#ifdef MODULE_FTSP
+#include "clocksync/ftsp.h"
+#endif
 #ifdef MODULE_CLOCKSYNC_EVAL
 #include "clocksync/clocksync_eval.h"
 #endif
@@ -186,9 +189,17 @@ void recv_ieee802154_frame(void)
 #endif
 #ifdef MODULE_GTSP
 			else if(dispatch_header == GTSP_PROTOCOL_DISPATCH) {
-				DEBUG("gtsp packet");
-				gtsp_mac_read(frame.payload, p);
+				DEBUG("gtsp packet received");
+				gtimer_timeval_t gtimer_toa = p->toa;
+				gtsp_mac_read(frame.payload, p->src, &gtimer_toa);
 			}
+#endif
+#ifdef MODULE_FTSP
+            else if(dispatch_header == FTSP_PROTOCOL_DISPATCH) {
+                DEBUG("ftsp packet received");
+                gtimer_timeval_t gtimer_toa = p->toa;
+                ftsp_mac_read(frame.payload, p->src, &gtimer_toa);
+            }
 #endif
 
             p->processing--;
