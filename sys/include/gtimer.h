@@ -22,7 +22,7 @@
 #include <vtimer.h>
 #include <stdint.h>
 
-typedef struct
+typedef struct gtimer_timeval
 {
 	uint64_t local;
 	uint64_t global;

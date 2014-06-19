@@ -30,24 +30,20 @@
 #include "gtimer.h"
 #include "radio/types.h"
 
-#define ABS64T(X)   ((X) < 0 ? -1*(X) : (X)) // not sure...
-
 typedef struct  __attribute__((packed)) {
 	uint8_t dispatch_marker; // << protocol marker
-    uint64_t local; // << sender hardware time
-    uint64_t global; // << sender logical time
+    uint16_t id;
+    uint16_t root;
+    uint16_t seq_number;
+    uint64_t local;
+    uint64_t offset;
     float relative_rate; // << sender logical clockrate
 } ftsp_beacon_t;
 
 
-typedef struct {
-	uint16_t src;
-	uint64_t local_local; // << current local hardware time when beacon was processed
-	uint64_t local_global; // << current local logical time when beacon was processed
-	uint64_t remote_local; // << sender local time when message was sent
-	uint64_t remote_global; // << sender global time when message was sent
-	float remote_rate; // << sender current clock rate correction factor
-	float relative_rate; // << current local clock rate relative to sender
+typedef struct ftsp_sync_point {
+    uint64_t local;
+    uint64_t offset;
 } ftsp_sync_point_t;
 
 /**

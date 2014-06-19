@@ -30,6 +30,7 @@
 #include "clocksync/gtsp.h"
 #include "gtimer.h"
 #include "nalp_protocols.h"
+#include "simplemap.h"
 #include "generic_ringbuffer.h"
 
 #define ENABLE_DEBUG (0)
@@ -48,7 +49,10 @@
 static void _gtsp_beacon_thread(void);
 static void _gtsp_cyclic_driver_thread(void);
 static void _gtsp_send_beacon(void);
-static int _gtsp_buffer_lookup(generic_ringbuffer_t *rb, uint16_t src);
+
+static gtsp_sync_point_t *_gtsp_neighbor_add(uint16_t addr,
+        gtsp_sync_point_t *sync_point);
+static gtsp_sync_point_t *_gtsp_neighbor_get(uint16_t addr);
 
 static int _gtsp_beacon_pid = 0;
 static int _gtsp_clock_pid = 0;
@@ -63,16 +67,15 @@ char gtsp_beacon_stack[GTSP_BEACON_STACK_SIZE];
 char gtsp_cyclic_stack[GTSP_CYCLIC_STACK_SIZE];
 char gtsp_beacon_buffer[GTSP_BEACON_BUFFER_SIZE] =
 { 0 };
-generic_ringbuffer_t gtsp_rb;
-gtsp_sync_point_t gtsp_grb_buffer[GTSP_MAX_NEIGHBORS];
+gtsp_sync_point_t gtsp_neighbor_table[GTSP_MAX_NEIGHBORS] =
+{ 0 };
+uint32_t gtsp_neighbor_counter = 0;
 
 mutex_t gtsp_mutex;
 
 void gtsp_init(void)
 {
     mutex_init(&gtsp_mutex);
-    grb_ringbuffer_init(&gtsp_rb, (char *) &gtsp_grb_buffer, GTSP_MAX_NEIGHBORS,
-            sizeof(gtsp_sync_point_t));
 
     _gtsp_beacon_pid = thread_create(gtsp_beacon_stack, GTSP_BEACON_STACK_SIZE,
     PRIORITY_MAIN - 2, CREATE_STACKTEST, _gtsp_beacon_thread, "gtsp_beacon");
@@ -136,28 +139,28 @@ static float gtsp_compute_rate(void)
     int64_t sum_offset = 0;
     int offset_count = 0;
     int neighbor_count = 0;
-    gtsp_sync_point_t beacon;
-    gtsp_sync_point_t *last_rcvd_beacon = &beacon;
 
-    int last_index = grb_get_last_index(&gtsp_rb);
-    for (int i = 0; i < last_index; i++)
+    gtsp_sync_point_t *beacon;
+
+    for (uint32_t i = 0; i < GTSP_MAX_NEIGHBORS; i++)
     {
-        grb_get_element(&gtsp_rb, (void **) &last_rcvd_beacon, i);
+        beacon = (gtsp_sync_point_t *) &gtsp_neighbor_table[i];
 
-        int64_t offset = (int64_t) last_rcvd_beacon->remote_global
-                - (int64_t) last_rcvd_beacon->local_global;
+        int64_t offset = (int64_t) beacon->remote_global
+                - (int64_t) beacon->local_global;
 
         neighbor_count++;
-        avg_rate += last_rcvd_beacon->relative_rate;
+        avg_rate += beacon->relative_rate;
 
-        if (offset > - _gtsp_jump_threshold)
+        if (offset > -_gtsp_jump_threshold)
         {
             // neighbor is ahead in time
             sum_offset += offset;
             offset_count++;
         }
     }
-    if (offset_count > 0 && !gtsp_jumped)
+    // don't jump backwards in time
+    if (offset_count > 0 && !gtsp_jumped && sum_offset >= 0)
     {
         int64_t correction = sum_offset / (offset_count + 1);
         if (correction < _gtsp_jump_threshold)
@@ -176,7 +179,7 @@ static float gtsp_compute_rate(void)
     return avg_rate;
 }
 
-void gtsp_mac_read(uint8_t *frame_payload, uint16_t src, gtimer_timeval_t toa)
+void gtsp_mac_read(uint8_t *frame_payload, uint16_t src, gtimer_timeval_t *toa)
 {
     DEBUG("gtsp_mac_read");
     mutex_lock(&gtsp_mutex);
@@ -192,15 +195,13 @@ void gtsp_mac_read(uint8_t *frame_payload, uint16_t src, gtimer_timeval_t toa)
         return; // don't accept packets if gtsp is paused
     }
 
-    int buffer_index;
     // check for previously received beacons from the same node
     DEBUG("gtsp_mac_read: Looking up src address: %" PRIu16 "\n", src);
-    if (-1 != (buffer_index = _gtsp_buffer_lookup(&gtsp_rb, src)))
+    if (NULL != (sync_point = _gtsp_neighbor_get(src)))
     {
         DEBUG("gtsp_mac_read: _gtsp_buffer_lookup success!");
-        grb_get_element(&gtsp_rb, (void **) &sync_point, buffer_index);
         // calculate local time between beacons
-        int64_t delta_local = toa.local - sync_point->local_local;
+        int64_t delta_local = toa->local - sync_point->local_local;
         // calculate estimate of remote time between beacons
         int64_t delta_remote = -LPC2387_FLOAT_CALC_TIME // << float calculations take a long time on lpc2387 (no FPU)
         + (int64_t) gtsp_beacon->local - (int64_t) sync_point->remote_local
@@ -215,22 +216,21 @@ void gtsp_mac_read(uint8_t *frame_payload, uint16_t src, gtimer_timeval_t toa)
     }
     else
     {
-        // create a new sync_point and add it to the ring buffer
-        buffer_index = grb_add_element(&gtsp_rb, &new_sync_point);
-        grb_get_element(&gtsp_rb, (void **) &sync_point, buffer_index);
-        sync_point->src = src;
+        // create a new sync_point and add it to the map
+        new_sync_point.src = src;
+        sync_point = _gtsp_neighbor_add(src, &new_sync_point);
     }
 
     // store the received and calculated data in the sync point
-    sync_point->local_local = toa.local;
-    sync_point->local_global = toa.global;
+    sync_point->local_local = toa->local;
+    sync_point->local_global = toa->global;
     sync_point->remote_local = gtsp_beacon->local;
     sync_point->remote_global = gtsp_beacon->global;
     sync_point->remote_rate = gtsp_beacon->relative_rate;
     sync_point->relative_rate = relative_rate;
 
     // if our clock is to far behind jump to remote clock value
-    int64_t offset = (int64_t) gtsp_beacon->global - (int64_t) toa.global;
+    int64_t offset = (int64_t) gtsp_beacon->global - (int64_t) toa->global;
     if (offset > _gtsp_jump_threshold)
     {
         gtsp_jumped = true;
@@ -282,20 +282,37 @@ void gtsp_driver_timestamp(uint8_t *ieee802154_frame, uint8_t frame_length)
     }
 }
 
-static int _gtsp_buffer_lookup(generic_ringbuffer_t *rb, uint16_t src)
+static gtsp_sync_point_t *_gtsp_neighbor_add(uint16_t addr,
+        gtsp_sync_point_t *sync_point)
 {
-    int last_index = grb_get_last_index(rb);
-    gtsp_sync_point_t *cur;
-    for (int i = 0; i <= last_index; i++)
+    gtsp_sync_point_t *sp;
+    if (NULL == (sp = _gtsp_neighbor_get(addr)))
     {
-        cur = (gtsp_sync_point_t *) &rb->buffer[i * rb->entry_size];
-        DEBUG(
-                "_gtsp_buffer_lookup: looking for src: %" PRIu16 " cur->src: %" PRIu16 "\n",
-                src, cur->src);
-        if (cur->src == src)
+        sp = &gtsp_neighbor_table[gtsp_neighbor_counter];
+
+        if (gtsp_neighbor_counter == GTSP_MAX_NEIGHBORS - 1)
         {
-            return i;
+            gtsp_neighbor_counter = 0;
+        }
+        else
+        {
+            gtsp_neighbor_counter++;
         }
     }
-    return -1;
+    memcpy(sp, sync_point, sizeof(gtsp_sync_point_t));
+    return sp;
+}
+
+static gtsp_sync_point_t *_gtsp_neighbor_get(uint16_t addr)
+{
+    gtsp_sync_point_t *sync_point;
+    for (int i = 0; i < GTSP_MAX_NEIGHBORS; i++)
+    {
+        sync_point = &gtsp_neighbor_table[i];
+        if (sync_point->src == addr)
+        {
+            return sync_point;
+        }
+    }
+    return NULL;
 }
