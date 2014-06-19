@@ -30,7 +30,6 @@
 #include "clocksync/gtsp.h"
 #include "gtimer.h"
 #include "nalp_protocols.h"
-#include "simplemap.h"
 #include "generic_ringbuffer.h"
 
 #define ENABLE_DEBUG (0)
@@ -68,7 +67,7 @@ char gtsp_cyclic_stack[GTSP_CYCLIC_STACK_SIZE];
 char gtsp_beacon_buffer[GTSP_BEACON_BUFFER_SIZE] =
 { 0 };
 gtsp_sync_point_t gtsp_neighbor_table[GTSP_MAX_NEIGHBORS] =
-{ 0 };
+{{ 0 }};
 uint32_t gtsp_neighbor_counter = 0;
 
 mutex_t gtsp_mutex;
