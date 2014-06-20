@@ -1,5 +1,5 @@
 /**
- * gtsp.h - Declarations and types for the Gradient Time Synchronisation Protocol.
+ * gtsp.h - Declarations and types for the Gradient Time Synchronization Protocol.
  *
  * Copyright (C) 2014  Philipp Rosenkranz
  *

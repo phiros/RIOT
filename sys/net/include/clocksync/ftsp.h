@@ -1,5 +1,5 @@
 /**
- * ftsp.h - Declarations and types for the Gradient Time Synchronisation Protocol.
+ * ftsp.h - Declarations and types for the Flooding Time Synchronization Protocol.
  *
  * Copyright (C) 2014  Philipp Rosenkranz
  *
@@ -11,16 +11,19 @@
 /**
  * @defgroup ftsp    FTSP - Gradient Time Synchronisation Protocol.
  * @ingroup  net
- * @brief    The Gradient Clock Synchronization Protocol is a decentralized clock
- *           synchronization protocol which tries to synchronizes not only the
- *           clock values but also the clock rate of all nodes in a network.
- * @see      <a href="http://www.disco.ethz.ch/publications/ipsn09.pdf">
- *              Sommer et.al.: Gradient Clock Synchronization in Wireless Sensor Networks
+ * @brief    The Flooding Time Synchronization Protocol is clock synchronization protocol
+ *           which tries to synchronizes not only the clock values but also the clock rate
+ *           of all nodes in a network. It builds a spanning tree and synchronizes every node
+ *           to their root. The level of a node in that tree is determined by its ID relative to
+ *           its neighboring node.
+ * @see      <a href="http://dl.acm.org/citation.cfm?id=1031501">
+ *              Maroti et.al.: The flooding time synchronization protocol
  *           </a>
  * @{
  * @file     ftsp.h
- * @brief    Declarations for the Gradient Clock Synchronization Protocol.
+ * @brief    Declarations for the Flooding Time Synchronization Protocol.
  * @author   Philipp Rosenkranz <philipp.rosenkranz@fu-berlin.de>
+ * @author   Daniel Jentsch <d.jentsch@fu-berlin.de>
  * @}
  */
 #ifndef __FTSP_H
@@ -43,7 +46,7 @@ typedef struct  __attribute__((packed)) {
 
 typedef struct ftsp_sync_point {
     uint64_t local;
-    uint64_t offset;
+    int64_t offset;
 } ftsp_sync_point_t;
 
 /**

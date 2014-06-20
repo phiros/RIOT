@@ -161,6 +161,7 @@ static void _clocksync_eval_beacon_send_thread(void)
 		if (!_clocksync_eval_beacon_pause)
 		{
 			mutex_lock(&clocksync_eval_mutex);
+			_clocksync_eval_send_beacon();
 			if (!_clocksync_eval_heartbeat_pause)
 			{
 				gtimer_timeval_t now;
@@ -168,12 +169,10 @@ static void _clocksync_eval_beacon_send_thread(void)
 				// about ~7800us - 8000us on lpc2387
 				printf("#eh,");
 				printf(" a: %"PRIu16 ",", _clocksynce_eval_transceiver_addr);
-				printf(" c: %"PRIu32 ",", _clocksync_eval_beacon_counter);
 				printf(" gl: %s,", l2s(now.local, X64LL_SIGNED));
 				printf(" gg: %s,", l2s(now.global, X64LL_SIGNED));
-				if(now.rate > 1.0) puts("bigger");
-				if(now.rate < -1.0) puts("smaller");
-				printf(" gr: %f", now.rate);
+				// display rate as integer; newlib's printf and floats do no play nice together
+				printf(" gr: %d", (int) (now.rate * 1000000000));
 #ifdef MODULE_CC110X_NG
 				printf(", pi: %"PRIu32, cc110x_statistic.packets_in);
 				printf(", po: %"PRIu32, cc110x_statistic.raw_packets_out);
@@ -183,7 +182,6 @@ static void _clocksync_eval_beacon_send_thread(void)
 				printf("\n");
 
 			}
-			_clocksync_eval_send_beacon();
 			_clocksync_eval_beacon_interval =
 					(_clocksync_eval_beacon_interval_lower
 							+ genrand_uint32()
@@ -195,7 +193,6 @@ static void _clocksync_eval_beacon_send_thread(void)
 		}
 	}
 }
-
 
 static void _clocksync_eval_cyclic_driver_thread_beacon(void)
 {
