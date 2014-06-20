@@ -68,6 +68,7 @@ void gtimer_sync_set_relative_rate(float rate)
 {
 	mutex_lock(&gtimer_mutex);
 	_gtimer_refresh_last_local();
+	if(rate > 1) puts("gtimer_sync_set_relative_rate: rate to large!");
 	gtimer_last.rate = rate;
 	mutex_unlock(&gtimer_mutex);
 }
@@ -88,6 +89,7 @@ static void _gtimer_now(gtimer_timeval_t *out)
 			+ (((now - gtimer_last.local) * gtimer_last.rate)
 					+ (now - gtimer_last.local));
 	out->local = now;
+	out->rate = gtimer_last.rate;
 }
 
 static void _gtimer_refresh_last_local(void)

@@ -54,10 +54,9 @@
 
 #define CLOCKSYNC_EVAL_BEACON_INTERVAL (10 * 1000 * 1000) // default to 10s
 #define CLOCKSYNC_EVAL_HEARTBEAT_INTERVAL (1 * 1000 * 1000) // default to 1s
-#define CLOCKSYNC_EVAL_BEACON_STACK_SIZE (KERNEL_CONF_STACKSIZE_PRINTF)
+#define CLOCKSYNC_EVAL_BEACON_STACK_SIZE (KERNEL_CONF_STACKSIZE_PRINTF_FLOAT)
 #define CLOCKSYNC_EVAL_HEARTBEAT_STACK_SIZE (KERNEL_CONF_STACKSIZE_PRINTF_FLOAT)
-#define CLOCKSYNC_EVAL_CYCLIC_BEACON_STACK_SIZE (KERNEL_CONF_STACKSIZE_DEFAULT)
-#define CLOCKSYNC_EVAL_CYCLIC_HEARTBEAT_STACK_SIZE (KERNEL_CONF_STACKSIZE_DEFAULT)
+#define CLOCKSYNC_EVAL_CYCLIC_BEACON_STACK_SIZE (KERNEL_CONF_STACKSIZE_PRINTF_FLOAT)
 #define CLOCKSYNC_EVAL_BEACON_BUFFER_SIZE (64)
 
 static void _clocksync_eval_beacon_send_thread(void);
@@ -70,8 +69,8 @@ static int _clocksync_eval_beacon_pid = 0;
 static uint32_t _clocksync_eval_beacon_interval = CLOCKSYNC_EVAL_BEACON_INTERVAL;
 static uint32_t _clocksync_eval_heartbeat_interval =
 CLOCKSYNC_EVAL_HEARTBEAT_INTERVAL;
-static uint32_t _clocksync_eval_beacon_interval_jitter = 10000;
-static uint32_t _clocksync_eval_beacon_interval_lower = 1000;
+static uint32_t _clocksync_eval_beacon_interval_jitter = 5000;
+static uint32_t _clocksync_eval_beacon_interval_lower = 5000;
 static uint16_t _clocksynce_eval_transceiver_addr = 1;
 
 static bool _clocksync_eval_beacon_pause = true;
@@ -80,7 +79,6 @@ static bool _clocksync_eval_heartbeat_pause = false;
 char clocksync_eval_beacon_stack[CLOCKSYNC_EVAL_BEACON_STACK_SIZE];
 char clocksync_eval_heartbeat_stack[CLOCKSYNC_EVAL_HEARTBEAT_STACK_SIZE];
 char clocksync_eval_cyclic_beacon_stack[CLOCKSYNC_EVAL_CYCLIC_BEACON_STACK_SIZE];
-char clocksync_eval_cyclic_heartbeat_stack[CLOCKSYNC_EVAL_CYCLIC_HEARTBEAT_STACK_SIZE];
 char clocksync_eval_beacon_buffer[CLOCKSYNC_EVAL_BEACON_BUFFER_SIZE] =
 { 0 };
 
@@ -173,6 +171,8 @@ static void _clocksync_eval_beacon_send_thread(void)
 				printf(" c: %"PRIu32 ",", _clocksync_eval_beacon_counter);
 				printf(" gl: %s,", l2s(now.local, X64LL_SIGNED));
 				printf(" gg: %s,", l2s(now.global, X64LL_SIGNED));
+				if(now.rate > 1.0) puts("bigger");
+				if(now.rate < -1.0) puts("smaller");
 				printf(" gr: %f", now.rate);
 #ifdef MODULE_CC110X_NG
 				printf(", pi: %"PRIu32, cc110x_statistic.packets_in);
