@@ -39,12 +39,13 @@ typedef struct  __attribute__((packed)) {
     uint16_t root;
     uint16_t seq_number;
     uint64_t local;
-    uint64_t offset;
+    int64_t offset;
     float relative_rate; // << sender logical clockrate
 } ftsp_beacon_t;
 
 
 typedef struct ftsp_sync_point {
+    uint16_t src; // TODO: only for debugging
     uint64_t local;
     int64_t offset;
 } ftsp_sync_point_t;

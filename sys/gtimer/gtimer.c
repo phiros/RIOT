@@ -21,6 +21,7 @@
 #include "vtimer.h"
 
 #define GTIMER_JUMP_WARN_THRESHOLD ((int64_t)1000*1000*1000)
+#define GTIMER_OFFSET_WARNINGS (1)
 
 #define ENABLE_DEBUG (0)
 #include "debug.h"
@@ -34,80 +35,95 @@ static void _gtimer_now(gtimer_timeval_t *out);
 
 void gtimer_now(timex_t *out)
 {
-	gtimer_timeval_t now;
-	gtimer_sync_now(&now);
-	timex_t result = timex_from_uint64(now.global);
-	*out = result;
+    gtimer_timeval_t now;
+    gtimer_sync_now(&now);
+    timex_t result = timex_from_uint64(now.global);
+    *out = result;
 }
 
 void gtimer_init(void)
 {
-	DEBUG("gtimer_init()\n");
-	timex_t now;
-	vtimer_now(&now);
-	mutex_init(&gtimer_mutex);
-	gtimer_last.local = timex_uint64(now);
-	gtimer_last.global = timex_uint64(now);
-	gtimer_last.rate = 0.0;
+    DEBUG("gtimer_init()\n");
+    timex_t now;
+    vtimer_now(&now);
+    mutex_init(&gtimer_mutex);
+    gtimer_last.local = timex_uint64(now);
+    gtimer_last.global = timex_uint64(now);
+    gtimer_last.rate = 0.0;
 }
 
 void gtimer_sync_now(gtimer_timeval_t *out)
 {
-	mutex_lock(&gtimer_mutex);
-	_gtimer_now(out);
-	mutex_unlock(&gtimer_mutex);
+    mutex_lock(&gtimer_mutex);
+    _gtimer_now(out);
+    mutex_unlock(&gtimer_mutex);
 }
 
-void gtimer_sync_set_global_offset(uint64_t global_offset, int caller)
+void gtimer_sync_set_global_offset(int64_t global_offset, int caller)
 {
-	mutex_lock(&gtimer_mutex);
-	_gtimer_refresh_last_local();
-	if(global_offset>GTIMER_JUMP_WARN_THRESHOLD) {
-	    puts("gtimer_sync_set_global_offset: warning jumping more than 10^9 us in the future!");
-	    printf(" suspected culprit is caller_id: %d\n", caller);
-	}
-	gtimer_last.global += global_offset;
-	mutex_unlock(&gtimer_mutex);
+    mutex_lock(&gtimer_mutex);
+    _gtimer_refresh_last_local();
+#ifdef GTIMER_OFFSET_WARNINGS
+    if (global_offset <= -1)
+    {
+        puts("gtimer_sync_set_global_offset: warning: offset negative!");
+        printf(" suspected culprit is caller_id: %d\n", caller);
+    }
+    if (global_offset > GTIMER_JUMP_WARN_THRESHOLD)
+    {
+        puts(
+                "gtimer_sync_set_global_offset: warning: jumping more than 10^9 us in the future!");
+        printf(" suspected culprit is caller_id: %d\n", caller);
+    }
+#endif /* GTIMER_OFFSET_WARNINGS */
+    if (gtimer_last.global < global_offset)
+        gtimer_last.global = 0;
+    else
+        gtimer_last.global += global_offset;
+    uint32_t *last_global = (uint32_t *) &(gtimer_last.global);
+    printf("gtimer_sync_set_global_offset: new global is: %"PRId32"\n", last_global[1]);
+    mutex_unlock(&gtimer_mutex);
 }
 
 void gtimer_sync_set_relative_rate(float rate)
 {
-	mutex_lock(&gtimer_mutex);
-	_gtimer_refresh_last_local();
-	if(rate > 1 || rate < -1) puts("gtimer_sync_set_relative_rate: rate to large!");
-	gtimer_last.rate = rate;
-	mutex_unlock(&gtimer_mutex);
+    mutex_lock(&gtimer_mutex);
+    _gtimer_refresh_last_local();
+    if (rate > 1 || rate < -1)
+        puts("gtimer_sync_set_relative_rate: rate to large!");
+    gtimer_last.rate = rate;
+    mutex_unlock(&gtimer_mutex);
 }
 
 float gtimer_sync_get_relative_rate(void)
 {
-	return gtimer_last.rate;
+    return gtimer_last.rate;
 }
 
 static void _gtimer_now(gtimer_timeval_t *out)
 {
-	uint64_t now;
-	timex_t temp;
-	vtimer_now(&temp);
-	now = timex_uint64(temp);
-	DEBUG("clockrate multiply: %"PRIu64 "\n", ((now - gtimer_last.local) * gtimer_last.rate));
-	out->global = gtimer_last.global
-			+ (((now - gtimer_last.local) * gtimer_last.rate)
-					+ (now - gtimer_last.local));
-	/*
-	if(out->global > (gtimer_last.global + GTIMER_JUMP_WARN_THRESHOLD) ) {
-	    puts("_gtimer_now: warning calculated wonky value for out->global");
-	    if(now<gtimer_last.global) puts("_gtimer_now: now smaller than gtimer_last.local for some reason!");
-	    if(now>(gtimer_last.local*1000)) puts("_gtimer_now: now considerably larger than gtimer_last.local!");
-	}
-	*/
-	out->local = now;
-	out->rate = gtimer_last.rate;
+    uint64_t now;
+    timex_t temp;
+    vtimer_now(&temp);
+    now = timex_uint64(temp);
+    DEBUG("clockrate multiply: %"PRIu64 "\n", ((now - gtimer_last.local) * gtimer_last.rate));
+    out->global = gtimer_last.global
+            + (((now - gtimer_last.local) * gtimer_last.rate)
+                    + (now - gtimer_last.local));
+    /*
+     if(out->global > (gtimer_last.global + GTIMER_JUMP_WARN_THRESHOLD) ) {
+     puts("_gtimer_now: warning calculated wonky value for out->global");
+     if(now<gtimer_last.global) puts("_gtimer_now: now smaller than gtimer_last.local for some reason!");
+     if(now>(gtimer_last.local*1000)) puts("_gtimer_now: now considerably larger than gtimer_last.local!");
+     }
+     */
+    out->local = now;
+    out->rate = gtimer_last.rate;
 }
 
 static void _gtimer_refresh_last_local(void)
 {
-	gtimer_timeval_t now;
-	_gtimer_now(&now);
-	gtimer_last = now;
+    gtimer_timeval_t now;
+    _gtimer_now(&now);
+    gtimer_last = now;
 }

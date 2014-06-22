@@ -60,7 +60,7 @@ void gtimer_sync_set_relative_rate(float rate);
  *
  * Should only be used by a time synchronization protocol.
  */
-void gtimer_sync_set_global_offset(uint64_t global_offset, int caller);
+void gtimer_sync_set_global_offset(int64_t global_offset, int caller);
 
 /**
  * @brief Returns the relative rate between the local and the global clock.
