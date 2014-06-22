@@ -103,12 +103,14 @@ void clocksync_eval_read_trigger(uint8_t *payload, uint16_t src,
 		gtimer_timeval_t *gtimer_toa)
 {
 	mutex_lock(&clocksync_eval_mutex);
+	char tl_buf[60] = {0};
+	char tg_buf[60] = {0};
 	DEBUG("clocksync_eval_read_trigger");
 	clocksync_eval_beacon_t *beacon = (clocksync_eval_beacon_t *) payload;
 	printf("#et, a: %" PRIu16 ",", src);
 	printf(" c: %"PRIu32",", beacon->counter);
-	printf(" tl: %s,", l2s(gtimer_toa->local, X64LL_SIGNED));
-	printf(" tg: %s\n", l2s(gtimer_toa->global, X64LL_SIGNED));
+	printf(" tl: %s,", l2s(gtimer_toa->local, X64LL_SIGNED, tl_buf));
+	printf(" tg: %s\n", l2s(gtimer_toa->global, X64LL_SIGNED, tg_buf));
 	mutex_unlock(&clocksync_eval_mutex);
 }
 
@@ -164,13 +166,15 @@ static void _clocksync_eval_beacon_send_thread(void)
 			_clocksync_eval_send_beacon();
 			if (!_clocksync_eval_heartbeat_pause)
 			{
+			    char tl_buf[60] = {0};
+			    char tg_buf[60] = {0};
 				gtimer_timeval_t now;
 				gtimer_sync_now(&now);
 				// about ~7800us - 8000us on lpc2387
 				printf("#eh,");
 				printf(" a: %"PRIu16 ",", _clocksynce_eval_transceiver_addr);
-				printf(" gl: %s,", l2s(now.local, X64LL_SIGNED));
-				printf(" gg: %s,", l2s(now.global, X64LL_SIGNED));
+				printf(" gl: %s,", l2s(now.local, X64LL_SIGNED, tl_buf));
+				printf(" gg: %s,", l2s(now.global, X64LL_SIGNED, tg_buf));
 				// display rate as integer; newlib's printf and floats do no play nice together
 				printf(" gr: %d", (int) (now.rate * 1000000000));
 #ifdef MODULE_CC110X_NG

@@ -130,6 +130,9 @@ extern void _clocksync_eval_handler(int argc, char **argv);
 #ifdef MODULE_GTSP
 extern void _gtsp(int argc, char **argv);
 #endif
+#ifdef MODULE_FTSP
+extern void _ftsp(int argc, char **argv);
+#endif
 
 
 const shell_command_t _shell_command_list[] = {
@@ -206,6 +209,9 @@ const shell_command_t _shell_command_list[] = {
 #endif
 #ifdef MODULE_GTSP
     { "gtsp", "Turns GTSP clock-sync on/off", _gtsp },
+#endif
+#ifdef MODULE_FTSP
+    { "ftsp", "Turns FTSP clock-sync on/off", _ftsp },
 #endif
 #ifdef CPU_X86
     {"lspci", "Lists PCI devices", _x86_lspci},

@@ -107,14 +107,6 @@ void auto_init(void)
     DEBUG("Auto init gtimer module.\n");
     gtimer_init();
 #endif 
-#ifdef MODULE_CLOCKSYNC_EVAL
-    DEBUG("Auto init clocksync_eval module.\n");
-    clocksync_eval_init();
-#endif
-#ifdef MODULE_GTSP
-    DEBUG("Auto init gtsp module.\n");
-    gtsp_init();
-#endif
 #ifdef MODULE_RTC
     DEBUG("Auto init rtc module.\n");
     rtc_init();
@@ -213,6 +205,18 @@ void auto_init(void)
 #ifdef MODULE_DESTINY
     DEBUG("Auto init transport layer [destiny] module.\n");
     destiny_init_transport_layer();
+#endif
+#ifdef MODULE_CLOCKSYNC_EVAL
+    DEBUG("Auto init clocksync_eval module.\n");
+    clocksync_eval_init();
+#endif
+#ifdef MODULE_GTSP
+    DEBUG("Auto init gtsp module.\n");
+    gtsp_init();
+#endif
+#ifdef MODULE_FTSP
+    DEBUG("Auto init ftsp module.\n");
+    ftsp_init();
 #endif
 
     main();

@@ -97,6 +97,7 @@ void recv_ieee802154_frame(void)
         msg_receive(&m);
 
         if (m.type == PKT_PENDING) {
+            DEBUG("packet received");
 #if (defined(MODULE_AT86RF231) | \
      defined(MODULE_CC2420) | \
      defined(MODULE_MC1322X))
@@ -174,13 +175,15 @@ void recv_ieee802154_frame(void)
 			uint8_t dispatch_header = frame.payload[0];
 			DEBUG("mac.c: dispatch header check");
 			if((dispatch_header >> 6) & LOWPAN_DISPATCH_HEADER) {
-				puts("lowpan packet");
+				DEBUG("lowpan packet");
 				/* deliver packet to network(6lowpan)-layer */
 				lowpan_read(frame.payload, length, &src, &dst);
 				/* TODO: get interface ID somehow */
 			}
+
 #ifdef MODULE_CLOCKSYNC_EVAL
 			else if(dispatch_header == CLOCKSYNC_EVAL_PROTOCOL_DISPATCH) {
+			    DEBUG("clocksync_eval packet received");
 				// ugly but necessary because of a suspected word alignment bug in gcc-4.8.1
 				gtimer_timeval_t gtimer_toa = p->toa;
 				clocksync_eval_read_trigger(frame.payload, p->src, &gtimer_toa);

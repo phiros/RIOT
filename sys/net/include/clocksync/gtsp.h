@@ -35,6 +35,7 @@ typedef struct  __attribute__((packed)) {
     uint64_t local; // << sender hardware time
     uint64_t global; // << sender logical time
     float relative_rate; // << sender logical clockrate
+    uint16_t crc;
 } gtsp_beacon_t;
 
 

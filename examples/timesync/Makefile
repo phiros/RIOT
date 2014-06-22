@@ -35,6 +35,7 @@ export QUIET ?= 1
 
 USEMODULE += posix
 USEMODULE += gtsp
+#USEMODULE += ftsp
 USEMODULE += shell
 USEMODULE += shell_commands
 USEMODULE += ps

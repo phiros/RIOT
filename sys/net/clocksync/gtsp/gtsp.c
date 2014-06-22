@@ -25,12 +25,21 @@
 #include "mutex.h"
 #include "ieee802154_frame.h"
 #include "sixlowpan/mac.h"
-#include "malloc.h"
+#include "random.h"
+#include "x64toa.h"
 
 #include "clocksync/gtsp.h"
 #include "gtimer.h"
 #include "nalp_protocols.h"
-#include "generic_ringbuffer.h"
+
+#ifdef MODULE_CC110X_NG
+#include "cc110x_ng.h"
+#define _TC_TYPE            TRANSCEIVER_CC1100
+
+#elif MODULE_NATIVENET
+#include "nativenet.h"
+#define _TC_TYPE            TRANSCEIVER_NATIVE
+#endif
 
 #define ENABLE_DEBUG (0)
 #include <debug.h>
@@ -41,13 +50,15 @@
 
 #define LPC2387_FLOAT_CALC_TIME (10)
 #define GTSP_MAX_NEIGHBORS (10)
-#define GTSP_BEACON_INTERVAL (30* 1000 * 1000)
+#define GTSP_BEACON_INTERVAL (30 * 1000 * 1000)  // in us
 #define GTSP_JUMP_THRESHOLD (10)
 #define GTSP_MOVING_ALPHA 0.9
-
+#define GTSP_SANE_OFFSET ((int64_t)3145 * 10 * 1000 * 1000 * 1000) // 1 year in us
+#define GTSP_SANE_OFFSET_CHECK (0)
 static void _gtsp_beacon_thread(void);
 static void _gtsp_cyclic_driver_thread(void);
 static void _gtsp_send_beacon(void);
+static uint16_t _gtsp_get_trans_addr(void);
 
 static gtsp_sync_point_t *_gtsp_neighbor_add(uint16_t addr,
         gtsp_sync_point_t *sync_point);
@@ -67,14 +78,26 @@ char gtsp_cyclic_stack[GTSP_CYCLIC_STACK_SIZE];
 char gtsp_beacon_buffer[GTSP_BEACON_BUFFER_SIZE] =
 { 0 };
 gtsp_sync_point_t gtsp_neighbor_table[GTSP_MAX_NEIGHBORS] =
-{{ 0 }};
+{
+{ 0 } };
 uint32_t gtsp_neighbor_counter = 0;
 
 mutex_t gtsp_mutex;
 
+/*
+ * TODO: now.global overflows. Problem with some difference? Look at uint64 data types
+ */
+
 void gtsp_init(void)
 {
     mutex_init(&gtsp_mutex);
+
+    gtsp_sync_point_t *beacon;
+    for (int i = 0; i < GTSP_MAX_NEIGHBORS; i++)
+    {
+        beacon = &gtsp_neighbor_table[i];
+        beacon->src = 0;
+    }
 
     _gtsp_beacon_pid = thread_create(gtsp_beacon_stack, GTSP_BEACON_STACK_SIZE,
     PRIORITY_MAIN - 2, CREATE_STACKTEST, _gtsp_beacon_thread, "gtsp_beacon");
@@ -105,6 +128,10 @@ static void _gtsp_beacon_thread(void)
 
 static void _gtsp_cyclic_driver_thread(void)
 {
+    uint16_t _gtsp_id = _gtsp_get_trans_addr();
+    genrand_init((uint32_t) _gtsp_id);
+    uint32_t random_wait = (100 + genrand_uint32() % GTSP_BEACON_INTERVAL);
+    vtimer_usleep(random_wait);
     while (1)
     {
         vtimer_usleep(_gtsp_beacon_interval);
@@ -144,9 +171,40 @@ static float gtsp_compute_rate(void)
     for (uint32_t i = 0; i < GTSP_MAX_NEIGHBORS; i++)
     {
         beacon = (gtsp_sync_point_t *) &gtsp_neighbor_table[i];
+        if (beacon->src == 0)
+            continue;
 
         int64_t offset = (int64_t) beacon->remote_global
                 - (int64_t) beacon->local_global;
+
+        // check for weird (transmission?) failures
+#ifdef GTSP_SANE_OFFSET_CHECK
+        if (offset > GTSP_SANE_OFFSET || offset < -GTSP_SANE_OFFSET)
+        {
+#ifdef ENABLE_DEBUG
+            char rg[60] =
+            { 0 };
+            char lg[60] =
+            { 0 };
+            char of[60] =
+            { 0 };
+            (void) rg;
+            (void) lg;
+            (void) of;
+#endif
+            puts(
+                    "gtsp_compute_rate: offset calculation yielded abnormal high value (transmission failure?)");
+            DEBUG("gtsp_compute_rate: offset %s ",
+                    l2s(offset, X64LL_SIGNED, of));
+            DEBUG(
+                    "beacon->remote_global: %s beacon->local_global: %s beacon->src: %"PRIu16"\n",
+                    l2s(beacon->remote_global, X64LL_SIGNED, rg),
+                    l2s(beacon->remote_local, X64LL_SIGNED, lg), beacon->src);
+            puts("gtsp_compute_rate: removing and skipping offending entry");
+            memset(beacon, 0, sizeof(gtsp_sync_point_t));
+            continue;
+        }
+#endif /* GTSP_SANE_OFFSET_CHECK */
 
         neighbor_count++;
         avg_rate += beacon->relative_rate;
@@ -164,7 +222,7 @@ static float gtsp_compute_rate(void)
         int64_t correction = sum_offset / (offset_count + 1);
         if (correction < _gtsp_jump_threshold)
         {
-            gtimer_sync_set_global_offset(correction);
+            gtimer_sync_set_global_offset(correction,2);
         }
     }
 
@@ -186,7 +244,10 @@ void gtsp_mac_read(uint8_t *frame_payload, uint16_t src, gtimer_timeval_t *toa)
     gtsp_sync_point_t *sync_point;
 
     float relative_rate = 0.0f;
-    gtsp_beacon_t *gtsp_beacon = (gtsp_beacon_t *) frame_payload;
+    gtsp_beacon_t gtsp_beacon;
+
+    // copy beacon into local buffer this function might run for a while
+    memcpy(&gtsp_beacon,  frame_payload, sizeof(gtsp_beacon_t));
 
     if (_gtsp_pause)
     {
@@ -203,10 +264,10 @@ void gtsp_mac_read(uint8_t *frame_payload, uint16_t src, gtimer_timeval_t *toa)
         int64_t delta_local = toa->local - sync_point->local_local;
         // calculate estimate of remote time between beacons
         int64_t delta_remote = -LPC2387_FLOAT_CALC_TIME // << float calculations take a long time on lpc2387 (no FPU)
-        + (int64_t) gtsp_beacon->local - (int64_t) sync_point->remote_local
-                + ((int64_t) gtsp_beacon->local
+        + (int64_t) gtsp_beacon.local - (int64_t) sync_point->remote_local
+                + ((int64_t) gtsp_beacon.local
                         - (int64_t) sync_point->remote_local)
-                        * gtsp_beacon->relative_rate;
+                        * gtsp_beacon.relative_rate;
         // estimate rate of the local clock relative to the rate of the remote clock
         float current_rate = (delta_remote - delta_local) / (float) delta_local;
         // use moving average filter in order to smoothen out short term fluctuations
@@ -220,21 +281,51 @@ void gtsp_mac_read(uint8_t *frame_payload, uint16_t src, gtimer_timeval_t *toa)
         sync_point = _gtsp_neighbor_add(src, &new_sync_point);
     }
 
+    int64_t offset = (int64_t) gtsp_beacon.global - (int64_t) toa->global;
+#ifdef GTSP_SANE_OFFSET_CHECK
+    if (offset > GTSP_SANE_OFFSET || offset < -GTSP_SANE_OFFSET)
+    {
+#ifdef ENABLE_DEBUG
+        char rg[60] =
+        { 0 };
+        char lg[60] =
+        { 0 };
+        char of[60] =
+        { 0 };
+        (void) rg;
+        (void) lg;
+        (void) of;
+#endif
+        puts(
+                "gtsp_mac_read: offset calculation yielded abnormal high value (transmission failure?)");
+        DEBUG("gtsp_mac_read: offset %s", l2s(offset, X64LL_SIGNED, of));
+        DEBUG(
+                "beacon->remote_global: %s beacon->local_global: %s beacon->src: %"PRIu16"\n",
+                l2s(gtsp_beacon.global, X64LL_SIGNED, rg),
+                l2s(toa->global, X64LL_SIGNED, lg), sync_point->src);
+        puts("gtsp_mac_read: removing and skipping offending entry");
+        memset(sync_point, 0, sizeof(gtsp_sync_point_t));
+        mutex_unlock(&gtsp_mutex);
+        return;
+    }
+#endif /* GTSP_SANE_OFFSET_CHECK */
+
     // store the received and calculated data in the sync point
     sync_point->local_local = toa->local;
     sync_point->local_global = toa->global;
-    sync_point->remote_local = gtsp_beacon->local;
-    sync_point->remote_global = gtsp_beacon->global;
-    sync_point->remote_rate = gtsp_beacon->relative_rate;
+    sync_point->remote_local = gtsp_beacon.local;
+    sync_point->remote_global = gtsp_beacon.global;
+    sync_point->remote_rate = gtsp_beacon.relative_rate;
     sync_point->relative_rate = relative_rate;
 
     // if our clock is to far behind jump to remote clock value
-    int64_t offset = (int64_t) gtsp_beacon->global - (int64_t) toa->global;
     if (offset > _gtsp_jump_threshold)
     {
         gtsp_jumped = true;
-        gtimer_sync_set_global_offset(offset);
-    }DEBUG("gtsp_mac_read: gtsp_compute_rate");
+        gtimer_sync_set_global_offset(offset, 1);
+    }
+
+    DEBUG("gtsp_mac_read: gtsp_compute_rate");
     // compute new relative clock rate based on new sync point
     float avg_rate = gtsp_compute_rate();
     gtimer_sync_set_relative_rate(avg_rate);
@@ -262,6 +353,14 @@ void gtsp_pause(void)
 void gtsp_resume(void)
 {
     _gtsp_pause = false;
+    if (_gtsp_clock_pid == 0)
+    {
+        _gtsp_clock_pid = thread_create(gtsp_cyclic_stack,
+        GTSP_CYCLIC_STACK_SIZE,
+        PRIORITY_MAIN - 2,
+        CREATE_STACKTEST, _gtsp_cyclic_driver_thread, "gtsp_cyclic_driver");
+    }
+
     DEBUG("GTSP enabled");
 }
 
@@ -314,4 +413,25 @@ static gtsp_sync_point_t *_gtsp_neighbor_get(uint16_t addr)
         }
     }
     return NULL;
+}
+
+static uint16_t _gtsp_get_trans_addr(void)
+{
+    msg_t mesg;
+    transceiver_command_t tcmd;
+    radio_address_t a;
+
+    if (transceiver_pid < 0)
+    {
+        puts("Transceiver not initialized");
+        return 1;
+    }
+
+    tcmd.transceivers = _TC_TYPE;
+    tcmd.data = &a;
+    mesg.content.ptr = (char *) &tcmd;
+    mesg.type = GET_ADDRESS;
+
+    msg_send_receive(&mesg, &mesg, transceiver_pid);
+    return a;
 }

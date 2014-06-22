@@ -84,7 +84,7 @@ void ftsp_resume(void);
  * @brief reads a frame supplied by the mac layer of sixlowpan.
  * This function should only be called by mac.c
  */
-void ftsp_mac_read(uint8_t *frame_payload, uint16_t src, gtimer_timeval_t);
+void ftsp_mac_read(uint8_t *frame_payload, uint16_t src, gtimer_timeval_t *toa);
 
 /**
  * @brief Refreshes the timestamp in a frame.
