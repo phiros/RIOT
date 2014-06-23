@@ -78,40 +78,43 @@ static uint16_t _ftsp_root_id = UINT16_MAX;
 static uint16_t _ftsp_id = 0;
 static uint32_t _ftsp_seq_num = 0;
 static uint32_t _ftsp_heartbeats = 0;
-static uint32_t _ftsp_errors = 0;
+//static uint32_t _ftsp_errors = 0;
 static uint32_t _ftsp_root_timeout = FTSP_ROOT_TIMEOUT;
-static int64_t _ftsp_last_offset = 0;
+//static int64_t _ftsp_last_offset = 0;
 
 char ftsp_beacon_stack[FTSP_BEACON_STACK_SIZE];
 char ftsp_cyclic_stack[FTSP_CYCLIC_STACK_SIZE];
 char ftsp_beacon_buffer[FTSP_BEACON_BUFFER_SIZE] =
 { 0 };
 
-static void _ftsp_correct_clock(void);
-static bool _ftsp_is_synced(void);
-static ftsp_sync_point_t *_ftsp_regression_table_enqueue(
-        ftsp_sync_point_t *sync_point);
-static ftsp_sync_point_t *_ftsp_regression_table_get_head(void);
-static ftsp_sync_point_t *_ftsp_regression_table_get_tail(void);
-static void _ftsp_regression_table_rm_head(void);
-static void _ftsp_regression_table_reset(void);
+//static void _ftsp_correct_clock(void);
+//static bool _ftsp_is_synced(void);
+//static ftsp_sync_point_t *_ftsp_regression_table_enqueue(
+//        ftsp_sync_point_t *sync_point);
+//static ftsp_sync_point_t *_ftsp_regression_table_get_head(void);
+//static ftsp_sync_point_t *_ftsp_regression_table_get_tail(void);
+//static void _ftsp_regression_table_rm_head(void);
+//static void _ftsp_regression_table_reset(void);
 static uint16_t _ftsp_get_trans_addr(void);
 
-static void _ftsp_print_sync_point(ftsp_sync_point_t *entry);
+// KEEEP!!!
+//static void _ftsp_print_sync_point(ftsp_sync_point_t *entry);
 static void _ftsp_print_beacon(ftsp_beacon_t *beacon);
 
-typedef struct ftsp_regression_table
-{
-    ftsp_sync_point_t table[FTSP_MAX_ENTRIES];
-    int rear;
-    int front;
-    int size;
-} ftsp_regression_table_t;
+// contiki ftsp
+static int8_t i, free_item, oldest_item;
+static uint64_t local_average, age, oldest_time;
+static uint8_t num_entries, table_entries, heart_beats, num_errors,
+        seq_num;
+static int64_t offset_average, time_error, a, b;
+static int64_t local_sum, offset_sum;
+static float skew;
+static table_item table[MAX_ENTRIES];
 
-static ftsp_regression_table_t _ftsp_rtable =
-{ .table =
-{
-{ 0 } }, .rear = -1, .front = -1, .size = 0 };
+static void clear_table(void);
+static void add_new_entry(ftsp_beacon_t *beacon, gtimer_timeval_t *toa);
+static void calculate_conversion(void);
+int is_synced(void);
 
 mutex_t ftsp_mutex;
 
@@ -122,6 +125,13 @@ mutex_t ftsp_mutex;
 void ftsp_init(void)
 {
     mutex_init(&ftsp_mutex);
+
+    skew = 0.0;
+    local_average = 0;
+    offset_average = 0;
+    clear_table();
+    heart_beats = 0;
+    num_errors = 0;
 
     _ftsp_beacon_pid = thread_create(ftsp_beacon_stack, FTSP_BEACON_STACK_SIZE,
     PRIORITY_MAIN - 2, CREATE_STACKTEST, _ftsp_beacon_thread, "ftsp_beacon");
@@ -190,7 +200,7 @@ static void _ftsp_send_beacon(void)
             _ftsp_root_id = _ftsp_id;
             _ftsp_seq_num++;
         }
-        if (_ftsp_root_id != _ftsp_id && _ftsp_rtable.size < FTSP_SEND_LIMIT)
+        if (_ftsp_root_id != _ftsp_id && num_entries < FTSP_SEND_LIMIT)
             return;
     }
 
@@ -202,7 +212,7 @@ static void _ftsp_send_beacon(void)
     ftsp_beacon->local = now.local;
     ftsp_beacon->relative_rate = now.rate;
     ftsp_beacon->root = _ftsp_root_id;
-    ftsp_beacon->seq_number = _ftsp_seq_num;
+    ftsp_beacon->seq_number = seq_num;
     puts("_ftsp_send_beacon: sending beacon with contents:\n");
     _ftsp_print_beacon(ftsp_beacon);
     sixlowpan_mac_send_ieee802154_frame(0, NULL, 8, ftsp_beacon_buffer,
@@ -214,75 +224,38 @@ static void _ftsp_send_beacon(void)
 
 void ftsp_mac_read(uint8_t *frame_payload, uint16_t src, gtimer_timeval_t *toa)
 {
-    puts("ftsp_mac_read");
+    puts("ftsp_mac_read entry");
     mutex_lock(&ftsp_mutex);
+    puts("ftsp_mac_read after mutex");
 
-    ftsp_beacon_t *ftsp_beacon = (ftsp_beacon_t *) frame_payload;
-
-    if (_ftsp_pause)
+    ftsp_beacon_t *beacon = (ftsp_beacon_t *) frame_payload;
+    if ((beacon->root < _ftsp_root_id)
+            && ~((heart_beats < IGNORE_ROOT_MSG) && (_ftsp_root_id == _ftsp_id)))
     {
-        mutex_unlock(&ftsp_mutex);
-        return; // don't accept packets if ftsp is paused
-    }
-
-    if (ftsp_beacon->id < _ftsp_root_id
-            && !(_ftsp_heartbeats < FTSP_IGNORE_ROOT_MSG
-                    && _ftsp_root_id == _ftsp_id))
-    {
-        DEBUG("ftsp_mac_read: Switched reference node to: %"PRIu16"\n",ftsp_beacon->id);
-        _ftsp_root_id = ftsp_beacon->root;
-        _ftsp_seq_num = ftsp_beacon->seq_number;
-    }
-    else if (_ftsp_root_id == ftsp_beacon->root
-            && ftsp_beacon->seq_number > _ftsp_seq_num)
-    {
-        _ftsp_seq_num = ftsp_beacon->seq_number;
+        _ftsp_root_id = beacon->root;
+        seq_num = beacon->seq_number;
     }
     else
     {
-        mutex_unlock(&ftsp_mutex);
-        return;
+        if ((_ftsp_root_id == beacon->root)
+                && ((int8_t) (beacon->seq_number - seq_num) > 0))
+        {
+            seq_num = beacon->seq_number;
+        }
+        else
+        {
+            mutex_unlock(&ftsp_mutex);
+            return;
+        }
     }
+
     if (_ftsp_root_id < _ftsp_id)
-        _ftsp_heartbeats = 0;
-    puts("_ftsp_print_beacon: received beacon!");
-    _ftsp_print_beacon(ftsp_beacon);
-    int64_t neighbor_global = ftsp_beacon->local + ftsp_beacon->offset;
-    char buf[66];
-    printf("neighbor_global: %s", l2s(neighbor_global, X64LL_SIGNED, buf));
-    printf(" ftsp_beacon->local: %s", l2s(ftsp_beacon->local, X64LL_SIGNED, buf));
-    printf(" ftsp_beacon->offset: %s\n", l2s(ftsp_beacon->offset, X64LL_SIGNED, buf));
-    if(neighbor_global<0) neighbor_global = 0;
+        heart_beats = 0;
 
-    int64_t sync_error = neighbor_global - toa->global;
-    if (sync_error < 0)
-        sync_error = -1 * sync_error;
-
-    if (_ftsp_is_synced() && sync_error > FTSP_IGNORE_THRESHOLD)
-    {
-        if (++_ftsp_errors > 3)
-            _ftsp_regression_table_reset();
-        mutex_unlock(&ftsp_mutex);
-        return; // ignore this beacon
-    }
-
-    _ftsp_errors = 0;
-
-    ftsp_sync_point_t new_entry;
-    new_entry.src = src;
-    new_entry.local = toa->local;
-    new_entry.offset = neighbor_global - toa->local;
-    puts("entry before enque:");
-    _ftsp_print_sync_point(&new_entry);
-
-    if (_ftsp_rtable.size == FTSP_MAX_ENTRIES)
-        _ftsp_regression_table_rm_head();
-
-    _ftsp_regression_table_enqueue(&new_entry);
-    _ftsp_correct_clock();
+    add_new_entry(beacon, toa);
+    calculate_conversion();
 
     mutex_unlock(&ftsp_mutex);
-    DEBUG("ftsp_mac_read: mutex unlocked");
 }
 
 void ftsp_set_beacon_delay(uint32_t delay_in_sec)
@@ -320,6 +293,7 @@ void ftsp_resume(void)
     puts("FTSP enabled");
 }
 
+/*
 static bool _ftsp_is_synced(void)
 {
     if (_ftsp_rtable.size >= FTSP_SYNC_LIMIT)
@@ -327,7 +301,8 @@ static bool _ftsp_is_synced(void)
     else
         return false;
 }
-
+*/
+/*
 static void _ftsp_correct_clock(void)
 {
     puts("_ftsp_correct_clock");
@@ -355,7 +330,8 @@ static void _ftsp_correct_clock(void)
     {
         for (int i = _ftsp_rtable.front; i <= _ftsp_rtable.rear; i++)
         {
-            printf("_ftsp_rtable.front <= _ftsp_rtable.rear loop index: %d\n", i);
+            printf("_ftsp_rtable.front <= _ftsp_rtable.rear loop index: %d\n",
+                    i);
             entry = &_ftsp_rtable.table[i];
             _ftsp_print_sync_point(entry);
             local_sum += (((int64_t) entry->local) - new_local_avg)
@@ -371,7 +347,8 @@ static void _ftsp_correct_clock(void)
         entry = &_ftsp_rtable.table[_ftsp_rtable.front];
         for (int i = _ftsp_rtable.front; i < FTSP_MAX_ENTRIES; i++)
         {
-            printf("_ftsp_rtable.front > _ftsp_rtable.rear loop1 index: %d\n", i);
+            printf("_ftsp_rtable.front > _ftsp_rtable.rear loop1 index: %d\n",
+                    i);
             entry = &_ftsp_rtable.table[i];
             _ftsp_print_sync_point(entry);
             local_sum += (((int64_t) entry->local) - new_local_avg)
@@ -383,7 +360,8 @@ static void _ftsp_correct_clock(void)
         }
         for (int i = 0; i <= _ftsp_rtable.rear; i++)
         {
-            printf("_ftsp_rtable.front > _ftsp_rtable.rear loop2 index: %d\n", i);
+            printf("_ftsp_rtable.front > _ftsp_rtable.rear loop2 index: %d\n",
+                    i);
             entry = &_ftsp_rtable.table[i];
             _ftsp_print_sync_point(entry);
             local_sum += (((int64_t) entry->local) - new_local_avg)
@@ -443,10 +421,8 @@ static void _ftsp_correct_clock(void)
     int64_t local_diff = entry->local - new_local_avg;
     printf("_ftsp_correct_clock: local_diff %s ",
             l2s(local_diff, X64LL_SIGNED, buf));
-    printf(" entry->local %s ",
-            l2s(entry->local, X64LL_SIGNED, buf));
-    printf(" new_local_avg %s \n",
-            l2s(new_local_avg, X64LL_SIGNED, buf));
+    printf(" entry->local %s ", l2s(entry->local, X64LL_SIGNED, buf));
+    printf(" new_local_avg %s \n", l2s(new_local_avg, X64LL_SIGNED, buf));
 
     int64_t offset_diff = (int64_t) (skew * local_diff);
     printf("_ftsp_correct_clock: offset_diff %s ",
@@ -456,123 +432,184 @@ static void _ftsp_correct_clock(void)
     printf("_ftsp_correct_clock: offset_est %s ",
             l2s(offset_est, X64LL_SIGNED, buf));
     printf("_ftsp_correct_clock: new_offset_avg %s ",
-               l2s(new_offset_avg, X64LL_SIGNED, buf));
-    printf(" new_offset_avg %s \n",
-            l2s(offset_diff, X64LL_SIGNED, buf));
+            l2s(new_offset_avg, X64LL_SIGNED, buf));
+    printf(" new_offset_avg %s \n", l2s(offset_diff, X64LL_SIGNED, buf));
     gtimer_timeval_t now;
     gtimer_sync_now(&now);
     int64_t offset_now = now.global - now.local;
-    printf(" offset_now %s ",
-            l2s(offset_now, X64LL_SIGNED, buf));
-    printf(" now.global %s ",
-            l2s(now.global, X64LL_SIGNED, buf));
-    printf(" now.local %s \n",
-            l2s(now.local, X64LL_SIGNED, buf));
+    printf(" offset_now %s ", l2s(offset_now, X64LL_SIGNED, buf));
+    printf(" now.global %s ", l2s(now.global, X64LL_SIGNED, buf));
+    printf(" now.local %s \n", l2s(now.local, X64LL_SIGNED, buf));
     int64_t offset = offset_est - offset_now;
     _ftsp_last_offset = offset;
     gtimer_sync_set_global_offset(offset, 1);
 }
+*/
 
 void ftsp_driver_timestamp(uint8_t *ieee802154_frame, uint8_t frame_length)
 {
     /*
-    if (ieee802154_frame[0] == FTSP_PROTOCOL_DISPATCH)
-    {
-        gtimer_timeval_t now;
-        ieee802154_frame_t frame;
-        uint8_t hdrlen = ieee802154_frame_read(ieee802154_frame, &frame,
-                frame_length);
-        ftsp_beacon_t *beacon = (ftsp_beacon_t *) frame.payload;
-        gtimer_sync_now(&now);
-        beacon->local = now.local;
-        beacon->offset = _ftsp_last_offset;
-        beacon->relative_rate = now.rate;
-        memcpy(ieee802154_frame + hdrlen, beacon, sizeof(ftsp_beacon_t));
-    }
-    */
+     if (ieee802154_frame[0] == FTSP_PROTOCOL_DISPATCH)
+     {
+     gtimer_timeval_t now;
+     ieee802154_frame_t frame;
+     uint8_t hdrlen = ieee802154_frame_read(ieee802154_frame, &frame,
+     frame_length);
+     ftsp_beacon_t *beacon = (ftsp_beacon_t *) frame.payload;
+     gtimer_sync_now(&now);
+     beacon->local = now.local;
+     beacon->offset = _ftsp_last_offset;
+     beacon->relative_rate = now.rate;
+     memcpy(ieee802154_frame + hdrlen, beacon, sizeof(ftsp_beacon_t));
+     }
+     */
 }
 
-// Neighbor table
-
-static ftsp_sync_point_t *_ftsp_regression_table_enqueue(
-        ftsp_sync_point_t *sync_point)
+int is_synced(void)
 {
-    ftsp_sync_point_t *sp = NULL;
-    if (_ftsp_rtable.size < FTSP_MAX_ENTRIES)
-    {
-        if (_ftsp_rtable.front == -1 && _ftsp_rtable.front == _ftsp_rtable.rear)
-            _ftsp_rtable.front = 0;
-        _ftsp_rtable.rear = (_ftsp_rtable.rear + 1) % (FTSP_MAX_ENTRIES - 1);
-        sp = &_ftsp_rtable.table[_ftsp_rtable.rear];
-        _ftsp_rtable.size++;
-        memcpy(sp, sync_point, sizeof(ftsp_sync_point_t));
-    }
-    return sp;
+    if ((num_entries >= ENTRY_VALID_LIMIT) || (_ftsp_root_id == _ftsp_id))
+        return FTSP_OK;
+    else
+        return FTSP_ERR;
 }
 
-static ftsp_sync_point_t *_ftsp_regression_table_get_head(void)
+static void add_new_entry(ftsp_beacon_t *beacon, gtimer_timeval_t *toa)
 {
-    ftsp_sync_point_t *sp = NULL;
-    if (_ftsp_rtable.size > 0)
-    {
-        sp = &_ftsp_rtable.table[_ftsp_rtable.front];
-    }
-    return sp;
-}
+    puts("calculate_conversion");
+    char buf[66];
+    free_item = -1;
+    oldest_item = 0;
+    age = 0;
+    oldest_time = 0;
 
-static ftsp_sync_point_t *_ftsp_regression_table_get_tail(void)
-{
-    ftsp_sync_point_t *sp = NULL;
-    if (_ftsp_rtable.size > 0)
-    {
-        sp = &_ftsp_rtable.table[_ftsp_rtable.rear];
-    }
-    return sp;
-}
+    table_entries = 0;
 
-static void _ftsp_regression_table_rm_head(void)
-{
-    if (_ftsp_regression_table_get_head() != NULL)
+    time_error = (int64_t) (beacon->local + beacon->offset - toa->global);
+    if (is_synced() == FTSP_OK)
     {
-        if (_ftsp_rtable.front == _ftsp_rtable.rear)
+        printf("FTSP synced, error %s\n", l2s(time_error, X64LL_SIGNED, buf));
+        if ((time_error > ENTRY_THROWOUT_LIMIT)
+                || (-time_error > ENTRY_THROWOUT_LIMIT))
         {
-            _ftsp_rtable.front = -1;
-            _ftsp_rtable.rear = -1;
+            printf("(big)\n");
+            if (++num_errors > 3)
+            {
+                printf("FTSP: num_errors > 3 => clear_table()\n");
+                clear_table();
+            }
         }
         else
         {
-            _ftsp_rtable.front = (_ftsp_rtable.front + 1)
-                    % (FTSP_MAX_ENTRIES - 1);
+            printf("(small)\n");
+            num_errors = 0;
         }
-        _ftsp_rtable.size--;
     }
+    else
+    {
+        printf("FTSP not synced\n");
+    }
+
+    for (i = 0; i < MAX_ENTRIES; ++i)
+    {
+        age = toa->local - table[i].local_time;
+
+        if (age >= 0x7FFFFFFFL)
+            table[i].state = ENTRY_EMPTY;
+
+        if (table[i].state == ENTRY_EMPTY)
+            free_item = i;
+        else
+            ++table_entries;
+
+        if (age >= oldest_time)
+        {
+            oldest_time = age;
+            oldest_item = i;
+        }
+    }
+
+    if (free_item < 0)
+        free_item = oldest_item;
+    else
+        ++table_entries;
+
+    table[free_item].state = ENTRY_FULL;
+    table[free_item].local_time = toa->local;
+    table[free_item].time_offset = beacon->local + beacon->offset - toa->local;
 }
 
-static void _ftsp_print_sync_point(ftsp_sync_point_t *entry)
+static void calculate_conversion(void)
 {
-    char buf[66];
-    printf("----\nentry: \n");
-    printf("\tsource %"PRIu16"\n", entry->src);
-    printf("\tlocal %s", l2s(entry->local, X64LL_SIGNED, buf));
-    printf("\toffset %s\n----\n", l2s(entry->offset, X64LL_SIGNED, buf));
+    puts("calculate_conversion");
+    for (i = 0; (i < MAX_ENTRIES) && (table[i].state != ENTRY_FULL); ++i)
+        ;
+
+    if (i >= MAX_ENTRIES)
+        return;   // table is empty
+
+    local_average = table[i].local_time;
+    offset_average = table[i].time_offset;
+
+    local_sum = 0;
+    offset_sum = 0;
+
+    while (++i < MAX_ENTRIES)
+    {
+        if (table[i].state == ENTRY_FULL)
+        {
+            local_sum += (long) (table[i].local_time - local_average)
+                    / table_entries;
+            offset_sum += (long) (table[i].time_offset - offset_average)
+                    / table_entries;
+        }
+    }
+
+    local_average += local_sum;
+    offset_average += offset_sum;
+
+    local_sum = offset_sum = 0;
+    for (i = 0; i < MAX_ENTRIES; ++i)
+    {
+        if (table[i].state == ENTRY_FULL)
+        {
+            a = table[i].local_time - local_average;
+            b = table[i].time_offset - offset_average;
+
+            local_sum += (long long) a * a;
+            offset_sum += (long long) a * b;
+        }
+    }
+
+    if (local_sum != 0)
+        skew = (float) offset_sum / (float) local_sum;
+
+    num_entries = table_entries;
+
+    gtimer_sync_set_relative_rate(skew);
+    gtimer_sync_set_global_offset(offset_average,1);
+
+    printf("FTSP conversion calculated: num_entries=%u, is_synced=%u\n",
+            num_entries, is_synced());
 }
 
-static void _ftsp_print_beacon(ftsp_beacon_t *beacon) {
+void clear_table(void)
+{
+    for (i = 0; i < MAX_ENTRIES; ++i)
+        table[i].state = ENTRY_EMPTY;
+
+    num_entries = 0;
+}
+
+static void _ftsp_print_beacon(ftsp_beacon_t *beacon)
+{
     char buf[66];
     printf("----\nbeacon: \n");
     printf("\t id: %"PRIu16"\n", beacon->id);
     printf("\t root: %"PRIu16"\n", beacon->root);
     printf("\t seq_number: %"PRIu16"\n", beacon->seq_number);
-    printf("\t local: %s\n", l2s(beacon->local,X64LL_SIGNED, buf));
-    printf("\t offset: %s\n", l2s(beacon->offset,X64LL_SIGNED, buf));
+    printf("\t local: %s\n", l2s(beacon->local, X64LL_SIGNED, buf));
+    printf("\t offset: %s\n", l2s(beacon->offset, X64LL_SIGNED, buf));
     printf("\t relative_rate: %f\n----\n", beacon->relative_rate);
-}
-
-static void _ftsp_regression_table_reset(void)
-{
-    _ftsp_rtable.front = -1;
-    _ftsp_rtable.rear = -1;
-    _ftsp_rtable.size = 0;
 }
 
 static uint16_t _ftsp_get_trans_addr(void)
