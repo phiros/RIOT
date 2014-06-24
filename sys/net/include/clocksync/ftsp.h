@@ -64,7 +64,7 @@ enum
     IGNORE_ROOT_MSG       = 4,              // after becoming the root ignore other roots messages (in send period)
     ENTRY_VALID_LIMIT     = 4,              // number of entries to become synchronized
     ENTRY_SEND_LIMIT      = 3,              // number of entries to send sync messages
-    ENTRY_THROWOUT_LIMIT  = 30,             // if time sync error is bigger than this (in 32 kHz ticks) clear the table
+    ENTRY_THROWOUT_LIMIT  = 300,             // if time sync error is bigger than this (in 32 kHz ticks) clear the table
 };
 
 enum
@@ -126,5 +126,10 @@ void ftsp_mac_read(uint8_t *frame_payload, uint16_t src, gtimer_timeval_t *toa);
  * The function should only be executed by a transceiver driver.
  */
 void ftsp_driver_timestamp(uint8_t *ieee802154_frame, uint8_t frame_length);
+
+/**
+ * @brief Answers whether this node is synched against the root or not.
+ */
+int ftsp_is_synced(void);
 
 #endif /* __FTSP_H */

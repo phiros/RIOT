@@ -42,6 +42,9 @@
 #endif
 
 #define ENABLE_DEBUG (0)
+#if DEBUG_ENABLED
+#define DEBUG_ENABLED
+#endif
 #include <debug.h>
 
 #define GTSP_BEACON_STACK_SIZE (KERNEL_CONF_STACKSIZE_DEFAULT)
@@ -181,7 +184,7 @@ static float gtsp_compute_rate(void)
 #ifdef GTSP_SANE_OFFSET_CHECK
         if (offset > GTSP_SANE_OFFSET || offset < -GTSP_SANE_OFFSET)
         {
-#ifdef ENABLE_DEBUG
+#ifdef DEBUG_ENABLED
             char rg[60] =
             { 0 };
             char lg[60] =
@@ -285,7 +288,7 @@ void gtsp_mac_read(uint8_t *frame_payload, uint16_t src, gtimer_timeval_t *toa)
 #ifdef GTSP_SANE_OFFSET_CHECK
     if (offset > GTSP_SANE_OFFSET || offset < -GTSP_SANE_OFFSET)
     {
-#ifdef ENABLE_DEBUG
+#ifdef DEBUG_ENABLED
         char rg[60] =
         { 0 };
         char lg[60] =
