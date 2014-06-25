@@ -42,6 +42,9 @@
 #ifdef MODULE_FTSP
 #include "clocksync/ftsp.h"
 #endif
+#ifdef MODULE_PULSESYNC
+#include "clocksync/pulsesync.h"
+#endif
 #ifdef MODULE_CLOCKSYNC_EVAL
 #include "clocksync/clocksync_eval.h"
 #endif
@@ -203,6 +206,13 @@ void recv_ieee802154_frame(void)
                 DEBUG("ftsp packet received");
                 gtimer_timeval_t gtimer_toa = p->toa;
                 ftsp_mac_read(frame.payload, p->src, &gtimer_toa);
+            }
+#endif
+#ifdef MODULE_PULSESYNC
+            else if(dispatch_header == PULSESYNC_PROTOCOL_DISPATCH) {
+                DEBUG("pulsesync packet received");
+                gtimer_timeval_t gtimer_toa = p->toa;
+                pulsesync_mac_read(frame.payload, p->src, &gtimer_toa);
             }
 #endif
 

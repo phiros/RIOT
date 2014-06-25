@@ -225,7 +225,7 @@ static float gtsp_compute_rate(void)
         int64_t correction = sum_offset / (offset_count + 1);
         if (correction < _gtsp_jump_threshold)
         {
-            gtimer_sync_set_global_offset(correction,2);
+            gtimer_sync_set_global_offset(correction);
         }
     }
 
@@ -325,7 +325,7 @@ void gtsp_mac_read(uint8_t *frame_payload, uint16_t src, gtimer_timeval_t *toa)
     if (offset > _gtsp_jump_threshold)
     {
         gtsp_jumped = true;
-        gtimer_sync_set_global_offset(offset, 1);
+        gtimer_sync_set_global_offset(offset);
     }
 
     DEBUG("gtsp_mac_read: gtsp_compute_rate");

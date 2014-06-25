@@ -88,6 +88,11 @@ ifneq (,$(filter ftsp,$(USEMODULE)))
     USEMODULE += ieee802154
     USEMODULE += gtimer
 endif
+ifneq (,$(filter pulsesync,$(USEMODULE)))
+    USEMODULE += sixlowpan
+    USEMODULE += ieee802154
+    USEMODULE += gtimer
+endif
 ifneq (,$(filter net_if,$(USEMODULE)))
 	USEMODULE += transceiver
 endif

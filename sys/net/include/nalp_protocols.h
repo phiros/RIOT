@@ -20,8 +20,11 @@
 // identifies a GTSP beacon
 #define GTSP_PROTOCOL_DISPATCH (0x21)
 
-// identifies a GTSP beacon
+// identifies a FTSP beacon
 #define FTSP_PROTOCOL_DISPATCH (0x22)
+
+// identifies a PULSESYNC beacon
+#define PULSESYNC_PROTOCOL_DISPATCH (0x23)
 
 
 #endif /* NALP_PROTOCOLS_H_ */

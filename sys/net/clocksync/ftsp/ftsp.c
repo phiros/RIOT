@@ -79,7 +79,7 @@ static uint8_t num_entries, table_entries, heart_beats, num_errors, seq_num;
 static int64_t offset_average, time_error, a, b;
 static int64_t local_sum, offset_sum;
 static float skew;
-static table_item table[MAX_ENTRIES];
+static table_item table[FTSP_MAX_ENTRIES];
 
 static void clear_table(void);
 static void add_new_entry(ftsp_beacon_t *beacon, gtimer_timeval_t *toa);
@@ -170,7 +170,7 @@ static void _ftsp_send_beacon(void)
         //          }
         //      }
 
-        if ((num_entries < ENTRY_SEND_LIMIT) && (_ftsp_root_id != _ftsp_id))
+        if ((num_entries < FTSP_ENTRY_SEND_LIMIT) && (_ftsp_root_id != _ftsp_id))
         {
             ++heart_beats;
         }
@@ -212,7 +212,7 @@ void ftsp_mac_read(uint8_t *frame_payload, uint16_t src, gtimer_timeval_t *toa)
     ftsp_beacon_t *beacon = (ftsp_beacon_t *) frame_payload;
 
     if ((beacon->root < _ftsp_root_id)
-            && !((heart_beats < IGNORE_ROOT_MSG) && (_ftsp_root_id == _ftsp_id)))
+            && !((heart_beats < FTSP_IGNORE_ROOT_MSG) && (_ftsp_root_id == _ftsp_id)))
     {
         _ftsp_root_id = beacon->root;
         seq_num = beacon->seq_number;
@@ -326,7 +326,7 @@ void ftsp_driver_timestamp(uint8_t *ieee802154_frame, uint8_t frame_length)
 
 int ftsp_is_synced(void)
 {
-    if ((num_entries >= ENTRY_VALID_LIMIT) || (_ftsp_root_id == _ftsp_id))
+    if ((num_entries >= FTSP_ENTRY_VALID_LIMIT) || (_ftsp_root_id == _ftsp_id))
         return FTSP_OK;
     else
         return FTSP_ERR;
@@ -335,10 +335,10 @@ int ftsp_is_synced(void)
 static void calculate_conversion(void)
 {
     DEBUG("calculate_conversion");
-    for (i = 0; (i < MAX_ENTRIES) && (table[i].state != ENTRY_FULL); ++i)
+    for (i = 0; (i < FTSP_MAX_ENTRIES) && (table[i].state != FTSP_ENTRY_FULL); ++i)
         ;
 
-    if (i >= MAX_ENTRIES)
+    if (i >= FTSP_MAX_ENTRIES)
         return;   // table is empty
 
     local_average = table[i].local_time;
@@ -347,9 +347,9 @@ static void calculate_conversion(void)
     local_sum = 0;
     offset_sum = 0;
 
-    while (++i < MAX_ENTRIES)
+    while (++i < FTSP_MAX_ENTRIES)
     {
-        if (table[i].state == ENTRY_FULL)
+        if (table[i].state == FTSP_ENTRY_FULL)
         {
             local_sum += (long) (table[i].local_time - local_average)
                     / table_entries;
@@ -362,9 +362,9 @@ static void calculate_conversion(void)
     offset_average += offset_sum;
 
     local_sum = offset_sum = 0;
-    for (i = 0; i < MAX_ENTRIES; ++i)
+    for (i = 0; i < FTSP_MAX_ENTRIES; ++i)
     {
-        if (table[i].state == ENTRY_FULL)
+        if (table[i].state == FTSP_ENTRY_FULL)
         {
             a = table[i].local_time - local_average;
             b = table[i].time_offset - offset_average;
@@ -386,7 +386,6 @@ static void calculate_conversion(void)
 static void add_new_entry(ftsp_beacon_t *beacon, gtimer_timeval_t *toa)
 {
     DEBUG("calculate_conversion");
-    char buf[66];
     free_item = -1;
     oldest_item = 0;
     age = 0;
@@ -397,9 +396,12 @@ static void add_new_entry(ftsp_beacon_t *beacon, gtimer_timeval_t *toa)
     time_error = (int64_t) (beacon->local + beacon->offset - toa->global);
     if (ftsp_is_synced() == FTSP_OK)
     {
-        //printf("FTSP synced, error %s\n", l2s(time_error, X64LL_SIGNED, buf));
-        if ((time_error > ENTRY_THROWOUT_LIMIT)
-                || (-time_error > ENTRY_THROWOUT_LIMIT))
+#ifdef DEBUG_ENABLED
+        char buf[60];
+        DEBUG("FTSP synced, error %s\n", l2s(time_error, X64LL_SIGNED, buf));
+#endif
+        if ((time_error > FTSP_ENTRY_THROWOUT_LIMIT)
+                || (-time_error > FTSP_ENTRY_THROWOUT_LIMIT))
         {
             DEBUG("(big)\n");
             if (++num_errors > 3)
@@ -419,14 +421,14 @@ static void add_new_entry(ftsp_beacon_t *beacon, gtimer_timeval_t *toa)
         DEBUG("FTSP not synced\n");
     }
 
-    for (i = 0; i < MAX_ENTRIES; ++i)
+    for (i = 0; i < FTSP_MAX_ENTRIES; ++i)
     {
         age = toa->local - table[i].local_time;
 
         if (age >= 0x7FFFFFFFL)
-            table[i].state = ENTRY_EMPTY;
+            table[i].state = FTSP_ENTRY_EMPTY;
 
-        if (table[i].state == ENTRY_EMPTY)
+        if (table[i].state == FTSP_ENTRY_EMPTY)
             free_item = i;
         else
             ++table_entries;
@@ -443,15 +445,15 @@ static void add_new_entry(ftsp_beacon_t *beacon, gtimer_timeval_t *toa)
     else
         ++table_entries;
 
-    table[free_item].state = ENTRY_FULL;
+    table[free_item].state = FTSP_ENTRY_FULL;
     table[free_item].local_time = toa->local;
     table[free_item].time_offset = beacon->local + beacon->offset - toa->local;
 }
 
 static void clear_table(void)
 {
-    for (i = 0; i < MAX_ENTRIES; ++i)
-        table[i].state = ENTRY_EMPTY;
+    for (i = 0; i < FTSP_MAX_ENTRIES; ++i)
+        table[i].state = FTSP_ENTRY_EMPTY;
 
     num_entries = 0;
 }
