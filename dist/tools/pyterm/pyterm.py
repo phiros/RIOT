@@ -301,21 +301,33 @@ class SerCmd(cmd.Cmd):
             #sys.stdout.flush()
 
 class PytermProt(Protocol):
+    def __init__(self, factory):
+        self.factory = factory
+        
+    def connectionMade(self):
+        print("writing to transport")
+        self.transport.write("hostname: %s\n" % (defaulthostname))
+    
     def dataReceived(self, data):
         sys.stdout.write(data)
+        if(data.strip() == "/exit"):
+            reactor.callLater(2, self.factory.shell.do_PYTERM_exit, data)
+        else:
+            self.factory.shell.ser.write(data + "\n")
 
     def sendMessage(self, msg):
-        self.transport.writeSomeData("%d#%s\n" % (len(msg), msg))
+        self.transport.write("%d#%s\n" % (len(msg), msg))
 
 class PytermClientFactory(ReconnectingClientFactory):
 
-    def __init__(self):
+    def __init__(self, shell = None):
         self.myproto = None
+        self.shell = shell
 
     def buildProtocol(self, addr):
         print('Connected.')
         self.resetDelay()
-        self.myproto = PytermProt()
+        self.myproto = PytermProt(self)
         return self.myproto
 
     def clientConnectionLost(self, connector, reason):
@@ -360,7 +372,7 @@ if __name__ == "__main__":
     myshell.prompt = ''
 
     if args.server and args.tcp_port:
-        myfactory = PytermClientFactory()
+        myfactory = PytermClientFactory(myshell)
         reactor.connectTCP(args.server, args.tcp_port, myfactory)
         myshell.factory = myfactory
         reactor.callInThread(myshell.cmdloop, "Welcome to pyterm!\nType '/exit' to exit.")
