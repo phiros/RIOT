@@ -26,7 +26,7 @@ class GTSPExperiment(Experiment):
         self.waitAndCall(5, self.setup)
         self.waitAndCall(1, self.enableGTSP)
         self.waitAndCall(1, self.disableGTSP)
-        self.waitAndCall(1, self.stopExperiment)     
+        self.waitAndCall(1, self.stop)     
         
     def setup(self):
         for host, connection in self.clientIterator():
