@@ -11,11 +11,11 @@ serverHost = "uhu"
 serverPort = 1025
 userName = "phiros"
 basePath = "/home/phiros"
-flasher = basePath + "/bin/n2n_flash.py"
-hexFilePath = basePath + "/toflash.hex"
-pyterm = basePath + "/RIOT/dist/tools/pyterm/pyterm.py" 
-logFilePath = "/home/phiros/testbed/.pyterm/log"
-hostFile = "/home/phiros/testbed/hosts"
+flasher = basePath + "/testbed/bin/n2n_flash.py"
+hexFilePath = basePath + "/testbed/toflash.hex"
+pyterm = basePath + "/testbed/RIOT/dist/tools/pyterm/pyterm.py" 
+logFilePath = basePath + "/testbed/.pyterm/log"
+hostFile = basePath + "/testbed/hosts"
 
 class GTSPExperiment(Experiment): 
     def preHook(self):
