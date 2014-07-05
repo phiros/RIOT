@@ -48,18 +48,18 @@ class DESTestbed(Testbed):
         self.hostFile = hostFile
         
     def flashNodes(self):
-        call("parallel-ssh -h %s -l %s 'python %s'" % (self.hostFile, self.userName, self.flasher))
+        call("parallel-ssh -h %s -l %s 'python %s'" % (self.hostFile, self.userName, self.flasher), shell = True)
         
     def cleanLogs(self):
-        call("rm -rf %s/*.log" % (self.logFilePath))
+        call("rm -rf %s/*.log" % (self.logFilePath), shell = True)
         
     def archiveLogs(self, experiment = None):
         time = datetime.datetime.now().strftime("%Y-%m-%d_%H_%M_%S")
-        call("tar -cjf %s/archived_logs_%s_%s.tar.bz2 %s/*.log" % (self.logFilePath, experiment, time, self.logFilePath))
+        call("tar -cjf %s/archived_logs_%s_%s.tar.bz2 %s/*.log" % (self.logFilePath, experiment, time, self.logFilePath), shell = True)
         
     def start(self):
-        call("parallel-ssh -h %s -l %s 'screen -S pyterm -d -m python %s'" % (self.hostFile, self.userName, self.pyterm))
+        call("parallel-ssh -h %s -l %s 'screen -S pyterm -d -m python %s'" % (self.hostFile, self.userName, self.pyterm), shell = True)
         
     def stop(self):
-        call("parallel-ssh -h %s -l %s 'screen -X -S pyterm quit'" % (self.hostFile, self.userName))
+        call("parallel-ssh -h %s -l %s 'screen -X -S pyterm quit'" % (self.hostFile, self.userName), shell = True)
           
