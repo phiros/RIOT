@@ -3,9 +3,10 @@
 
 import sys, os
 sys.path.append(os.path.join(os.path.dirname(__file__), "../pytermcontroller"))
+sys.path.append(os.path.join(os.path.dirname(__file__), "../testbeds"))
 
 from pytermcontroller import Experiment, ExperimentRunner
-from pytermcontroller.testbeds import DESTestbed
+from testbeds import DESTestbed
 
 serverHost = "uhu"
 serverPort = 1025
