@@ -64,6 +64,6 @@ class DESTestbed(Testbed):
         call("parallel-ssh -h %s -l %s 'screen -S pyterm -d -m python %s'" % (self.hostFile, self.userName, self.pyterm), shell = True)
         
     def stop(self):
-        print("stop: parallel-ssh -h %s -l %s 'screen -X -S pyterm quit'" % (self.hostFile, self.userName, self.pyterm))
+        print("stop: parallel-ssh -h %s -l %s 'screen -X -S pyterm quit'" % (self.hostFile, self.userName))
         call("parallel-ssh -h %s -l %s 'screen -X -S pyterm quit'" % (self.hostFile, self.userName), shell = True)
           
