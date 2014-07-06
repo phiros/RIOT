@@ -48,6 +48,7 @@ class DESTestbed(Testbed):
         self.hostFile = hostFile
         
     def flashNodes(self):
+        print("flashNodes: parallel-ssh -h %s -l %s 'python %s'" % (self.hostFile, self.userName, self.flasher))
         call("parallel-ssh -h %s -l %s 'python %s'" % (self.hostFile, self.userName, self.flasher), shell = True)
         
     def cleanLogs(self):
