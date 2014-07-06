@@ -51,6 +51,7 @@ class DESTestbed(Testbed):
         call("parallel-ssh -h %s -l %s 'python %s'" % (self.hostFile, self.userName, self.flasher), shell = True)
         
     def cleanLogs(self):
+        print("cleanLogs: rm -rf %s/*.log" % (self.logFilePath))
         call("rm -rf %s/*.log" % (self.logFilePath), shell = True)
         
     def archiveLogs(self, experiment = None):
@@ -58,8 +59,10 @@ class DESTestbed(Testbed):
         call("tar -cjf %s/archived_logs_%s_%s.tar.bz2 %s/*.log" % (self.logFilePath, experiment, time, self.logFilePath), shell = True)
         
     def start(self):
+        print("start: parallel-ssh -h %s -l %s 'screen -S pyterm -d -m python %s'" % (self.hostFile, self.userName, self.pyterm))
         call("parallel-ssh -h %s -l %s 'screen -S pyterm -d -m python %s'" % (self.hostFile, self.userName, self.pyterm), shell = True)
         
     def stop(self):
+        print("stop: parallel-ssh -h %s -l %s 'screen -X -S pyterm quit'" % (self.hostFile, self.userName, self.pyterm))
         call("parallel-ssh -h %s -l %s 'screen -X -S pyterm quit'" % (self.hostFile, self.userName), shell = True)
           
