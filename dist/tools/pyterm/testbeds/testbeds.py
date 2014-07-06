@@ -57,7 +57,7 @@ class DESTestbed(Testbed):
         
     def archiveLogs(self, experiment = None):
         time = datetime.datetime.now().strftime("%Y-%m-%d_%H_%M_%S")
-        call("tar -cjf %s/archived_logs_%s_%s.tar.bz2 %s/*.log" % (self.logFilePath, experiment, time, self.logFilePath), shell = True)
+        call("tar -cjf %s/../archived_logs_%s_%s.tar.bz2 %s/*.log" % (self.logFilePath, experiment, time, self.logFilePath), shell = True)
         
     def start(self):
         print("start: parallel-ssh -h %s -l %s 'screen -S pyterm -d -m python %s'" % (self.hostFile, self.userName, self.pyterm))
