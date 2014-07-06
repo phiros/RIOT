@@ -35,7 +35,7 @@ class GTSPExperiment(Experiment):
         
         self.sendToAll("clocksynce beacon interval 5000 5000")
         self.sendToAll("clocksynce beacon on")
-        self.sendToAll("clocksynce beacon heartbeat on")
+        self.sendToAll("clocksynce heartbeat on")
         
     def enableGTSP(self):
         self.sendToAll("gtsp on")
