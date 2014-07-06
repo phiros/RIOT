@@ -81,7 +81,8 @@ class Experiment():
     
     def stop(self): 
         print("Running postHook")       
-        self.postHook()         
+        self.postHook()  
+        self.runner.stop()       
       
     def preHook(self):
         pass   
