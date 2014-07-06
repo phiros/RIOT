@@ -14,7 +14,7 @@ userName =    "phiros"
 basePath =    "/home/phiros"
 flasher =     basePath + "/bin/n2n_flash.py"
 hexFilePath = basePath + "/toflash.hex"
-pyterm =      basePath + "/RIOT/dist/tools/pyterm/pyterm.py -s " + serverHost + "-P " + str(serverPort) 
+pyterm =      basePath + "/RIOT/dist/tools/pyterm/pyterm.py -s " + serverHost + " -P " + str(serverPort) 
 logFilePath = basePath + "/testbed/.pyterm/log"
 hostFile =    basePath + "/testbed/hosts"
 
