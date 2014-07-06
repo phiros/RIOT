@@ -12,3 +12,4 @@ cachegrind.out*
 .cproject
 .settings
 /toolchain
+.pydevproject
