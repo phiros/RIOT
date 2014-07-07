@@ -306,7 +306,7 @@ class PytermProt(Protocol):
         
     def connectionMade(self):
         print("writing to transport")
-        self.transport.write("hostname: %s\n" % (defaulthostname))
+        self.transport.write("hostname: %s\n" % (self.factory.shell.host))
     
     def dataReceived(self, data):
         sys.stdout.write(data)
@@ -363,7 +363,7 @@ if __name__ == "__main__":
     parser.add_argument("-P", "--tcp_port", type=int,
             help="Port at the JSON server")
     parser.add_argument("-H", "--host",
-            help="Hostname of this maschine")
+            help="Hostname of this machine")
     parser.add_argument("-rn", "--run-name",
             help="Run name, used for logfile")
     args = parser.parse_args()
