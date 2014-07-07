@@ -211,19 +211,19 @@ void auto_init(void)
     destiny_init_transport_layer();
 #endif
 #ifdef MODULE_CLOCKSYNC_EVAL
-    DEBUG("Auto init clocksync_eval module.\n");
+    put("Auto init clocksync_eval module.\n");
     clocksync_eval_init();
 #endif
 #ifdef MODULE_GTSP
-    DEBUG("Auto init gtsp module.\n");
+    put("Auto init gtsp module.\n");
     gtsp_init();
 #endif
 #ifdef MODULE_FTSP
-    DEBUG("Auto init ftsp module.\n");
+    put("Auto init ftsp module.\n");
     ftsp_init();
 #endif
 #ifdef MODULE_PULSESYNC
-    DEBUG("Auto init pulsesync module.\n");
+    put("Auto init pulsesync module.\n");
     pulsesync_init();
 #endif
 
