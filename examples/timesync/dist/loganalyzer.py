@@ -101,6 +101,6 @@ items = [(key, value) for key, value in localErrorMaxAvg.items() if value>0]
 time, values = zip(*items)
 pylab.title("max local error")
 pylab.plot(time, values)
-pylab.ylim([0, 5000])
+pylab.ylim([0, 15000])
 pylab.show() 
                 

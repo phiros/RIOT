@@ -30,6 +30,10 @@
 #include "clocksync/ftsp.h"
 #define REFRESHTIMESTAMP ftsp_driver_timestamp
 #endif
+#ifdef MODULE_PULSESYNC
+#include "clocksync/pulsesync.h"
+#define REFRESHTIMESTAMP pulsesync_driver_timestamp
+#endif
 
 #include "irq.h"
 
