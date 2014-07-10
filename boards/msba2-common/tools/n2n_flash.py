@@ -9,6 +9,7 @@ import subprocess
 import re
 import threading
 import time
+import sys
 from os.path import expanduser
 
 class Flash():
@@ -130,8 +131,9 @@ if __name__ == "__main__":
         if len(sys.argv)>1:
             flash.doflash(sys.argv[1])
             print "\nFlash completed."
-            return 0
+            sys.exit()
         else:
-            print "usage: " + sys.argv[0] + " pathToHexFile"      
+            print "usage: " + sys.argv[0] + " pathToHexFile"
+            sys.exit(-1)      
     else :
         print "No nodes to flash found in directory '/dev/'"

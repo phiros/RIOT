@@ -54,8 +54,15 @@ class ExperimentRunner():
         
     def stop(self):
         self.testbed.stop()
+        reactor.callFromThread(self.safeReactorStop)
+            
+    def safeReactorStop(self):
         if reactor.running:
-            reactor.callFromThread(reactor.stop)
+            try:
+                reactor.stop()
+            except:
+                print("tried to shutdown reactor twice!")
+                
         
     def handle_sigint(self, signal, frame):        
         self.experiment.stop()
@@ -129,4 +136,5 @@ class Experiment():
     
     @staticmethod 
     def sendToConnection(connection, line):
-        connection.write(line + "\n")      
+        connection.write(line + "\n")   
+  

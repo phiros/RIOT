@@ -35,10 +35,16 @@
 #ifdef MODULE_CC110X_NG
 #include "cc110x_ng.h"
 #define _TC_TYPE            TRANSCEIVER_CC1100
+#define GTSP_CALIBRATION_OFFSET ((uint32_t) 2300)
 
 #elif MODULE_NATIVENET
 #include "nativenet.h"
 #define _TC_TYPE            TRANSCEIVER_NATIVE
+#define GTSP_CALIBRATION_OFFSET ((uint32_t) 1500)
+
+#else
+#warning "You are using GTSP with an unsupported transceiver..."
+#define GTSP_CALIBRATION_OFFSET ((uint32_t) 0) // unknown offset
 #endif
 
 #define ENABLE_DEBUG (0)
@@ -51,7 +57,6 @@
 #define GTSP_CYCLIC_STACK_SIZE (KERNEL_CONF_STACKSIZE_DEFAULT)
 #define GTSP_BEACON_BUFFER_SIZE (64)
 
-#define LPC2387_FLOAT_CALC_TIME (10)
 #define GTSP_MAX_NEIGHBORS (10)
 #define GTSP_BEACON_INTERVAL (30 * 1000 * 1000)  // in us
 #define GTSP_JUMP_THRESHOLD (10)
@@ -70,7 +75,7 @@ static gtsp_sync_point_t *_gtsp_neighbor_get(uint16_t addr);
 static int _gtsp_beacon_pid = 0;
 static int _gtsp_clock_pid = 0;
 static uint32_t _gtsp_beacon_interval = GTSP_BEACON_INTERVAL;
-static uint32_t _gtsp_prop_time = 0;
+static uint32_t _gtsp_prop_time = GTSP_CALIBRATION_OFFSET;
 static bool _gtsp_pause = true;
 static uint32_t _gtsp_jump_threshold = GTSP_JUMP_THRESHOLD;
 static bool gtsp_jumped = false;
@@ -266,7 +271,7 @@ void gtsp_mac_read(uint8_t *frame_payload, uint16_t src, gtimer_timeval_t *toa)
         // calculate local time between beacons
         int64_t delta_local = toa->local - sync_point->local_local;
         // calculate estimate of remote time between beacons
-        int64_t delta_remote = -LPC2387_FLOAT_CALC_TIME // << float calculations take a long time on lpc2387 (no FPU)
+        int64_t delta_remote =
         + (int64_t) gtsp_beacon.local - (int64_t) sync_point->remote_local
                 + ((int64_t) gtsp_beacon.local
                         - (int64_t) sync_point->remote_local)
@@ -339,11 +344,13 @@ void gtsp_mac_read(uint8_t *frame_payload, uint16_t src, gtimer_timeval_t *toa)
 
 void gtsp_set_beacon_delay(uint32_t delay_in_sec)
 {
+    printf("gtsp_set_beacon_delay: %"PRIu32"\n", delay_in_sec);
     _gtsp_beacon_interval = delay_in_sec * 1000 * 1000;
 }
 
 void gtsp_set_prop_time(uint32_t us)
 {
+    printf("gtsp_set_prop_time: %"PRIu32"\n", us);
     _gtsp_prop_time = us;
 }
 
@@ -363,6 +370,7 @@ void gtsp_resume(void)
         PRIORITY_MAIN - 2,
         CREATE_STACKTEST, _gtsp_cyclic_driver_thread, "gtsp_cyclic_driver");
     }
+    printf("GTSP enabled with calibration offset: %" PRIu32 "\n", _gtsp_prop_time);
 
     DEBUG("GTSP enabled");
 }
@@ -377,8 +385,8 @@ void gtsp_driver_timestamp(uint8_t *ieee802154_frame, uint8_t frame_length)
                 frame_length);
         gtsp_beacon_t *beacon = (gtsp_beacon_t *) frame.payload;
         gtimer_sync_now(&now);
-        beacon->local = now.local;
-        beacon->global = now.global;
+        beacon->local = now.local + _gtsp_prop_time;
+        beacon->global = now.global + _gtsp_prop_time;
         memcpy(ieee802154_frame + hdrlen, beacon, sizeof(gtsp_beacon_t));
     }
 }

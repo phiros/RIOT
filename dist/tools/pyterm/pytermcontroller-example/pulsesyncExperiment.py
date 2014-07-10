@@ -18,25 +18,10 @@ pyterm =      basePath + "/RIOT/dist/tools/pyterm/pyterm.py -s " + serverHost + 
 logFilePath = basePath + "/testbed/.pyterm/log"
 hostFile =    basePath + "/testbed/hosts"
 
-class PulsyncExperiment(Experiment): 
+class PulsesyncExperiment(ClockSyncExperiment): 
     def preHook(self):
-        self.readHostFile(hostFile)
-      
-    def start(self):
-        self.waitAndCall(1*60,   self.setup)
-        self.waitAndCall(15*60 , self.enableGTSP)
-        self.waitAndCall(15*60 , self.disableGTSP)
-        self.waitAndCall(15*60 , self.stop)     
-        
-    def setup(self):
-        for host, connection in self.clientIterator():
-            if self.hostid[host]:
-                self.sendToConnection(connection, "addr " + str(self.hostid[host]))
-        
-        self.sendToAll("clocksynce beacon interval 5000 5000")
-        self.sendToAll("clocksynce beacon on")
-        self.sendToAll("clocksynce heartbeat on")
-        
+        self.readHostFile(hostFile)      
+            
     def enableGTSP(self):
         self.sendToAll("pulsesync on")
         
@@ -44,11 +29,11 @@ class PulsyncExperiment(Experiment):
         self.sendToAll("pulsesync off")        
         
     def postHook(self): 
-        pass
+        self.runner.testbed.archiveLogs("pulsesync-des")
         #self.sendToAll("/exit")        
                
 testbed = DESTestbed(serverHost, serverPort, userName, flasher, 
                      hexFilePath, pyterm, logFilePath, hostFile)
 testbed.flashNodes()
-experiment = ExperimentRunner(PulsyncExperiment, testbed) 
+experiment = ExperimentRunner(PulsesyncExperiment, testbed) 
 experiment.run()

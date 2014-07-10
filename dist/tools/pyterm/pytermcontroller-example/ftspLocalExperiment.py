@@ -17,23 +17,19 @@ hexFilePath = basePath + "/RIOT/examples/timesync/bin/avsextrem/timesync.hex"
 pyterm =      basePath + "/RIOT/dist/tools/pyterm/pyterm.py -s " + serverHost + " -P " + str(serverPort) 
 logFilePath = basePath + "/.pyterm/log"
 
-class GTSPLocalExperiment(LocalClockSyncExperiment):
+class FTSPLocalExperiment(LocalClockSyncExperiment):
     def enableProtocol(self):
-        #self.sendToAll("gtsp delay 2240")
-        #self.sendToAll("gtsp delay 2220")
-        self.sendToAll("gtsp delay 0")
-        self.sendToAll("gtsp freq 10")
-        self.sendToAll("gtsp on")
+        self.sendToAll("ftsp on")
         
     def disableProtocol(self):
-        self.sendToAll("gtsp off")        
+        self.sendToAll("ftsp off")        
         
     def postHook(self):         
-        self.runner.testbed.archiveLogs("gtsp-local")
+        self.runner.testbed.archiveLogs("ftsp-local")
         #self.sendToAll("/exit")        
                
 testbed = LocalTestbed(serverHost, serverPort, flasher, hexFilePath
                        ,pyterm, logFilePath)
-#testbed.flashNodes()
-experiment = ExperimentRunner(GTSPLocalExperiment, testbed) 
+testbed.flashNodes()
+experiment = ExperimentRunner(FTSPLocalExperiment, testbed) 
 experiment.run()

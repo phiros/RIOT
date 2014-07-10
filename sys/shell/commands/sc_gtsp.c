@@ -40,6 +40,20 @@ void _gtsp(int argc, char **argv)
             gtsp_pause();
             return;
         }
+
+    }
+    if (argc == 3)
+    {
+        if (!strcmp(argv[1], "delay"))
+        {
+            gtsp_set_prop_time((uint32_t) atoi(argv[2]));
+            return;
+        }
+        if (!strcmp(argv[1], "freq"))
+        {
+            gtsp_set_beacon_delay((uint32_t) atoi(argv[2]));
+            return;
+        }
     }
     _print_help();
 }
