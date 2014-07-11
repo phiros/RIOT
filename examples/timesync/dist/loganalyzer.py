@@ -84,11 +84,7 @@ class ClocksyncEvalLogAnalyzer():
                     globalServerDiff = serverTimeStamp - globalTime
                     if globalServerDiff < self.globalMinDiff:
                         self.globalMinDiff = globalServerDiff
-                    timeBucket = int(math.floor(serverTimeStamp/bucketsize)*bucketsize)
-                    #print "checking"
-                    if timeBucket < 3000:
-                        print "timeBucket: " + str(timeBucket)
-                    #print "serverTimeStamp: "  + str(serverTimeStamp) + " timeBucket: " + str(timeBucket)
+                    timeBucket = int(math.floor(serverTimeStamp/bucketsize)*bucketsize)                   
                     if timeBucket > self.maxServerTime:
                         self.maxServerTime = timeBucket
                         
