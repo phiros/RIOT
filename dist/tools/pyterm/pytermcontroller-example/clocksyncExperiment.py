@@ -6,13 +6,14 @@ from pytermcontroller import Experiment
 
 class ClockSyncExperiment(Experiment):
     def start(self):
-        self.waitAndCall(0.1*60, self.setup)
-        self.waitAndCall(0.1*60, self.enableProtocol)
-        self.waitAndCall(10 *60, self.disableProtocol)
-        self.waitAndCall(0.1 *60, self.stop)     
-        #self.waitAndCall(10 *60, self.enableProtocol)
-        #self.waitAndCall(15 *60, self.disableProtocol)
-        #self.waitAndCall(15 *60, self.stop)     
+        #self.waitAndCall(0.1*60, self.setup)
+        #self.waitAndCall(0.1*60, self.enableProtocol)
+        #self.waitAndCall(10 *60, self.disableProtocol)
+        #self.waitAndCall(0.1 *60, self.stop)
+        self.waitAndCall(0.5*60, self.setup)         
+        self.waitAndCall(10 *60, self.enableProtocol)
+        self.waitAndCall(15 *60, self.disableProtocol)
+        self.waitAndCall(15 *60, self.stop)     
        
     def setup(self):
         for host, connection in self.clientIterator():

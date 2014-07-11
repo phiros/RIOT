@@ -23,6 +23,7 @@ class GTSPExperiment(ClockSyncExperiment):
         self.readHostFile(hostFile)      
             
     def enableGTSP(self):
+        self.sendToAll("gtsp delay 2220")
         self.sendToAll("gtsp on")
         
     def disableGTSP(self):
