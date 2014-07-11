@@ -54,7 +54,7 @@ def main(argv):
        loga = ClocksyncEvalLogAnalyzer(logdir, ".*" + protocol +  " on.*", ".*" + protocol +  " off.*")
    else:
        loga = ClocksyncEvalLogAnalyzer(logdir, ".*RIOT.*", "$a")
-
+    
    loga.analyze() 
    if globalError:
         xvals = loga.maxGlobalError.keys()
@@ -67,6 +67,7 @@ def main(argv):
    pylab.plot(xvals, yvals)
    if yrange>0:
        pylab.ylim([0,yrange])
+   # pylab.ylim([0,300])
    pylab.show()
 
 if __name__ == "__main__":
