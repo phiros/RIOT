@@ -13,6 +13,9 @@ class ClocksyncEvalLogAnalyzer():
         self.maxServerTime = 0
         self.beginRe = beginRe
         self.endRe = endRe
+        self.heartBeatBucketSize = 10 * 1000 * 1000 # 10 s
+        self.maxGlobalError = dict()
+        self.globalMinDiff = sys.maxint
         
     def analyze(self):
         for root, dirs, files in os.walk(self.logdir):
@@ -20,9 +23,14 @@ class ClocksyncEvalLogAnalyzer():
                 if file.endswith(".log"):
                     fileName = os.path.join(root, file)
                     self.fillLocalErrorDict(fileName)
-                    self.triggerToMaxLocalError()
-                    od = collections.OrderedDict(sorted(self.localErrorMaxAvg.items()))
-                    self.localErrorMaxAvg = od
+                    self.fillHeartbeatDict(fileName)
+        self.triggerToMaxLocalError()
+        self.heartBeatToGlobalError()
+        od = collections.OrderedDict(sorted(self.localErrorMaxAvg.items()))
+        self.localErrorMaxAvg = od
+        self.scaleGlobalErrorTime()
+        od = collections.OrderedDict(sorted(self.maxGlobalError.items()))
+        self.maxGlobalError = od
                     
     def getCalibrationOffset(self):
         calCount = self.avgLocalErrorToCalibration()   
@@ -42,8 +50,8 @@ class ClocksyncEvalLogAnalyzer():
         return (unixtime + millisecondPart)
     
     def fillHeartbeatDict(self, fileName):
-        bucketsize = 10 * 1000 * 1000 # 10 seconds buckets
-        logpats = r'(\S+)\s+(\S+).*\#eh, a: (\S+), gl: (\S+), gg: (\S+).*'
+        bucketsize = self.heartBeatBucketSize # 10 seconds buckets
+        logpats = r'(\S+)\s+(\S+).*\#eh, a: (\S+), gl: (\S+), gg: (\S+),.*'
         hostpats = r'.*/(\S+)\.log'
         endPats = r'' + self.endRe
         beginPats = r'' + self.beginRe
@@ -69,20 +77,55 @@ class ClocksyncEvalLogAnalyzer():
                     tuple = match.groups()
                     serverDate = tuple[0]
                     serverTime = tuple[1]
-                    serverTimeStamp = self.dateTimeToTimeStamp(serverDate, serverTime)
+                    serverTimeStamp = self.dateTimeToTimeStamp(serverDate, serverTime)*1000*1000
                     sourceId = int(tuple[2])
                     localTime = int(tuple[3])
                     globalTime = int(tuple[4])
                     globalServerDiff = serverTimeStamp - globalTime
-                    timeBucket = math.floor(serverTimeStamp/bucketsize)*bucketsize
+                    if globalServerDiff < self.globalMinDiff:
+                        self.globalMinDiff = globalServerDiff
+                    timeBucket = int(math.floor(serverTimeStamp/bucketsize)*bucketsize)
+                    #print "checking"
+                    if timeBucket < 3000:
+                        print "timeBucket: " + str(timeBucket)
+                    #print "serverTimeStamp: "  + str(serverTimeStamp) + " timeBucket: " + str(timeBucket)
                     if timeBucket > self.maxServerTime:
                         self.maxServerTime = timeBucket
                         
                     tupple = (serverTimeStamp, globalServerDiff, sourceId, localTime, globalTime)
-                    if not self.heartbeatDict.has_key(timeBucket):
-                        self.heartbeatDict[timeBucket] = [tupple]                        
-                    else:                                    
-                        self.heartbeatDict[timeBucket].append(tupple)                    
+                    if self.heartbeatDict.has_key(timeBucket):
+                        self.heartbeatDict[timeBucket].append(tupple)                                       
+                    else:
+                        self.heartbeatDict[timeBucket] = [tupple]                                             
+                         
+                        
+    def heartBeatToGlobalError(self):
+        self.globalMinBucket = sys.maxint
+        self.localMaxBucket = 0
+        for bucket, tuppleList in self.heartbeatDict.items():
+            if bucket < self.globalMinBucket:
+                self.globalMinBucket = bucket
+            if bucket > self.localMaxBucket:
+                self.localMaxBucket = bucket
+                
+            minDiff = sys.maxint
+            maxDiff = 0
+            for tupple in tuppleList:
+                globalServerDiff = tupple[1]
+                if globalServerDiff < minDiff:
+                    minDiff = globalServerDiff
+                if globalServerDiff > maxDiff:
+                    maxDiff = globalServerDiff
+            self.maxGlobalError[bucket] = maxDiff - minDiff
+      
+        
+    def scaleGlobalErrorTime(self):
+        newGlobalError = dict()
+        for time in self.maxGlobalError.keys():
+            timeInSeconds = int((time-self.globalMinBucket)/(1000*1000))            
+            newGlobalError[timeInSeconds] =  self.maxGlobalError[time]
+        self.maxGlobalError = newGlobalError      
+                   
     
 
     def fillLocalErrorDict(self, fileName):

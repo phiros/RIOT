@@ -8,7 +8,11 @@ from loganalyzer import ClocksyncEvalLogAnalyzer
 
 def print_help():
     supportedProtocols = ["gtsp", "ftsp", "pulsesync"]
-    print("plotSyncError.py -p <protocol> -l <path-to-log-files>")
+    print("plotSyncError.py -p <protocol> -l <path-to-log-files> [-G|-L]")
+    print("-G: global error")
+    print("-L: local error")
+    print("-y: y max")
+    print("-s: show only sync phase")
     print("supported protocols: ")
     for p in supportedProtocols:
         print("\t" + p)
@@ -16,9 +20,12 @@ def print_help():
 def main(argv):
    protocol = None
    logdir = None
+   globalError = False
+   yrange = 0
+   synconly = False
    
    try:
-      opts, args = getopt.getopt(argv,"hp:l:",["protocol=","log-dir="])
+      opts, args = getopt.getopt(argv,"hp:l:GLy:s",["protocol=","log-dir=", "Global", "Local", "y-range=", "sync-only"])
    except getopt.GetoptError:
           print_help()
           sys.exit(2)
@@ -30,19 +37,36 @@ def main(argv):
            protocol = arg
        elif opt in ("-l", "--log-dir"):
            logdir = arg
+       elif opt in ("-G", "--Global"):
+           globalError = True  
+       elif opt in ("-L", "--Local"):
+           globalError = False  
+       elif opt in ("-y", "--y-range"):
+           yrange = int(arg)
+       elif opt in ("-s", "--sync-only"):
+           synconly = True                            
+        
    if not protocol or not logdir:
        print_help()
        sys.exit(1)
-    
-   #loga = ClocksyncEvalLogAnalyzer(logdir, ".*" + protocol +  " on.*", ".*" + protocol +  " off.*")
-   loga = ClocksyncEvalLogAnalyzer(logdir, ".*RIOT.*", "$a")
+   
+   if synconly:
+       loga = ClocksyncEvalLogAnalyzer(logdir, ".*" + protocol +  " on.*", ".*" + protocol +  " off.*")
+   else:
+       loga = ClocksyncEvalLogAnalyzer(logdir, ".*RIOT.*", "$a")
 
-   loga.analyze()  
-   xvals = loga.localErrorMaxAvg.keys()
-   yvals = loga.localErrorMaxAvg.values()
-   pylab.title("local sync error")
+   loga.analyze() 
+   if globalError:
+        xvals = loga.maxGlobalError.keys()
+        yvals = loga.maxGlobalError.values()
+        pylab.title("global sync error")
+   else:      
+       xvals = loga.localErrorMaxAvg.keys()
+       yvals = loga.localErrorMaxAvg.values()
+       pylab.title("local sync error")
    pylab.plot(xvals, yvals)
-   pylab.ylim([0,300])
+   if yrange>0:
+       pylab.ylim([0,yrange])
    pylab.show()
 
 if __name__ == "__main__":
