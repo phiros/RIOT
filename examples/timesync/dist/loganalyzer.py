@@ -6,6 +6,9 @@ import time, calendar, collections
 
 class ClocksyncEvalLogAnalyzer():
     def __init__(self, logdir = "", beginRe = ".*", endRe = ".*"):
+        # Diconary: (sendingNode, receivingNode) -> Rate of transfered signals
+        self.adjDict = dict()
+        self.maxAdj = 0.0
         self.triggerDict = dict()
         self.heartbeatDict = dict()
         self.localErrorMaxAvg = dict()
@@ -16,6 +19,16 @@ class ClocksyncEvalLogAnalyzer():
         self.heartBeatBucketSize = 10 * 1000 * 1000 # 10 s
         self.maxGlobalError = dict()
         self.globalMinDiff = sys.maxint
+        self.loadHostFile()
+
+    # Creates hosts dict NodeId -> NodeName
+    def loadHostFile(self):
+        self.hosts = dict()
+        id = 1
+        with open("/home/daniel/hosts") as f:
+            for line in f:
+                self.hosts[id] = line.strip()
+                id += 1
         
     def analyze(self):
         for root, dirs, files in os.walk(self.logdir):
@@ -31,7 +44,12 @@ class ClocksyncEvalLogAnalyzer():
         self.scaleGlobalErrorTime()
         od = collections.OrderedDict(sorted(self.maxGlobalError.items()))
         self.maxGlobalError = od
-                    
+
+        print self.maxAdj
+        for relation in self.adjDict.keys():
+            self.adjDict[relation] /= self.maxAdj
+            print relation, ": ", self.adjDict[relation]
+
     def getCalibrationOffset(self):
         calCount = self.avgLocalErrorToCalibration()   
         od = collections.OrderedDict(sorted(calCount.items())) 
@@ -89,6 +107,8 @@ class ClocksyncEvalLogAnalyzer():
                     if timeBucket < 3000:
                         print "timeBucket: " + str(timeBucket)
                     #print "serverTimeStamp: "  + str(serverTimeStamp) + " timeBucket: " + str(timeBucket)
+                    timeBucket = math.floor(serverTimeStamp/bucketsize)*bucketsize
+
                     if timeBucket > self.maxServerTime:
                         self.maxServerTime = timeBucket
                         
@@ -163,12 +183,20 @@ class ClocksyncEvalLogAnalyzer():
                     globalTime = int(tuple[5])
                     if not self.triggerDict.has_key(beaconSender):
                         self.triggerDict[beaconSender] = dict()
-                        if not self.triggerDict[beaconSender].has_key(beaconCounter):
-                            self.triggerDict[beaconSender][beaconCounter] = []
-                    else:
-                        if not self.triggerDict[beaconSender].has_key(beaconCounter):
-                            self.triggerDict[beaconSender][beaconCounter] = []                          
+                    if not self.triggerDict[beaconSender].has_key(beaconCounter):
+                        self.triggerDict[beaconSender][beaconCounter] = []                          
                     self.triggerDict[beaconSender][beaconCounter].append((hostName, serverTimeStamp, localTime, globalTime)) 
+
+                    # Updating adj dict
+                    relation = self.hosts[beaconSender], hostName
+                    if not self.adjDict.has_key(relation):
+                        self.adjDict[relation] = 1.0
+                    else:
+                        self.adjDict[relation] += 1.0
+
+                    if self.adjDict[relation] > self.maxAdj:
+                        self.maxAdj = self.adjDict[relation]
+
 
     def triggerToMaxLocalError(self):
         bucketsize = 10 # -> 0.1 ms buckets
