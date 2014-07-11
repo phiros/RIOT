@@ -24,11 +24,11 @@ class GTSPExperiment(ClockSyncExperiment):
     def preHook(self):
         self.readHostFile(hostFile)      
             
-    def enableGTSP(self):
+    def enableProtocol(self):
         self.sendToAll("gtsp delay 2220")
         self.sendToAll("gtsp on")
         
-    def disableGTSP(self):
+    def disableProtocol(self):
         self.sendToAll("gtsp off")        
         
     def postHook(self): 
