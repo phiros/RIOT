@@ -181,7 +181,7 @@ static void _ftsp_send_beacon(void)
             ftsp_beacon->id = _ftsp_id;
             // TODO: do we need to add the transmission delay to the offset?
             ftsp_beacon->offset = (int64_t) now.global - (int64_t) now.local;
-            ftsp_beacon->local = now.local;
+            ftsp_beacon->local = now.local + _ftsp_prop_time;
             ftsp_beacon->relative_rate = now.rate;
             ftsp_beacon->root = _ftsp_root_id;
             ftsp_beacon->seq_number = seq_num;
@@ -316,7 +316,7 @@ void ftsp_driver_timestamp(uint8_t *ieee802154_frame, uint8_t frame_length)
                 frame_length);
         ftsp_beacon_t *beacon = (ftsp_beacon_t *) frame.payload;
         gtimer_sync_now(&now);
-        beacon->local = now.local;
+        beacon->local = now.local + _ftsp_prop_time;
         beacon->offset = (int64_t) now.global - (int64_t) now.local;
         beacon->relative_rate = now.rate;
         memcpy(ieee802154_frame + hdrlen, beacon, sizeof(ftsp_beacon_t));

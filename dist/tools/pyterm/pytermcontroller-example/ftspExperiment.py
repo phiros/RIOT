@@ -7,6 +7,8 @@ sys.path.append(os.path.join(os.path.dirname(__file__), "../testbeds"))
 
 from pytermcontroller import Experiment, ExperimentRunner
 from testbeds import DESTestbed
+from clocksyncExperiment import ClockSyncExperiment
+
 
 serverHost =  "uhu"
 serverPort =  1025
@@ -22,10 +24,11 @@ class FTSPExperiment(ClockSyncExperiment):
     def preHook(self):
         self.readHostFile(hostFile)      
             
-    def enableGTSP(self):
+    def enableProtocol(self):
+        self.sendToAll("ftsp delay 2220")
         self.sendToAll("ftsp on")
         
-    def disableGTSP(self):
+    def disableProtocol(self):
         self.sendToAll("ftsp off")        
         
     def postHook(self): 

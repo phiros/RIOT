@@ -60,5 +60,5 @@ void _gtsp(int argc, char **argv)
 
 static void _print_help(void)
 {
-    printf("Usage: gtsp [on] | [off]\n");
+    printf("Usage: gtsp [on] | [off] | [delay num_in_us] | [freq num_in_s] \n");
 }

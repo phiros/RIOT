@@ -41,10 +41,23 @@ void _ftsp(int argc, char **argv)
             return;
         }
     }
+    if (argc == 3)
+    {
+        if (!strcmp(argv[1], "delay"))
+        {
+            ftsp_set_prop_time((uint32_t) atoi(argv[2]));
+            return;
+        }
+        if (!strcmp(argv[1], "freq"))
+        {
+            ftsp_set_beacon_delay((uint32_t) atoi(argv[2]));
+            return;
+        }
+    }
     _print_help();
 }
 
 static void _print_help(void)
 {
-    printf("Usage: ftsp [on] | [off]\n");
+    printf("Usage: ftsp [on] | [off] | [delay num_in_us] | [freq num_in_s] \n");
 }

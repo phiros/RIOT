@@ -7,8 +7,10 @@ import time, calendar, collections
 class ClocksyncEvalLogAnalyzer():
     def __init__(self, logdir = "", beginRe = ".*", endRe = ".*"):
         self.triggerDict = dict()
+        self.heartbeatDict = dict()
         self.localErrorMaxAvg = dict()
         self.logdir = logdir
+        self.maxServerTime = 0
         self.beginRe = beginRe
         self.endRe = endRe
         
@@ -38,6 +40,49 @@ class ClocksyncEvalLogAnalyzer():
         timetuple = time.strptime(tempString.split(",")[0], "%Y-%m-%d %H:%M:%S")
         unixtime = float(calendar.timegm(timetuple))
         return (unixtime + millisecondPart)
+    
+    def fillHeartbeatDict(self, fileName):
+        bucketsize = 10 * 1000 * 1000 # 10 seconds buckets
+        logpats = r'(\S+)\s+(\S+).*\#eh, a: (\S+), gl: (\S+), gg: (\S+).*'
+        hostpats = r'.*/(\S+)\.log'
+        endPats = r'' + self.endRe
+        beginPats = r'' + self.beginRe
+        logpat = re.compile(logpats)        
+        hostpat = re.compile(hostpats)        
+        beginpat = re.compile(beginPats)        
+        endpat = re.compile(endPats)
+        continueToRead = False
+        with open(fileName) as f:
+            hostMatch = hostpat.match(fileName)
+            if hostMatch:
+                hostName = hostMatch.groups()[0]
+            for line in f:
+                if endpat.match(line):
+                    break
+                if not continueToRead:
+                    if beginpat.match(line):
+                        continueToRead = True
+                    continue
+                
+                match = logpat.match(line)
+                if(match): 
+                    tuple = match.groups()
+                    serverDate = tuple[0]
+                    serverTime = tuple[1]
+                    serverTimeStamp = self.dateTimeToTimeStamp(serverDate, serverTime)
+                    sourceId = int(tuple[2])
+                    localTime = int(tuple[3])
+                    globalTime = int(tuple[4])
+                    globalServerDiff = serverTimeStamp - globalTime
+                    timeBucket = math.floor(serverTimeStamp/bucketsize)*bucketsize
+                    if timeBucket > self.maxServerTime:
+                        self.maxServerTime = timeBucket
+                        
+                    tupple = (serverTimeStamp, globalServerDiff, sourceId, localTime, globalTime)
+                    if not self.heartbeatDict.has_key(timeBucket):
+                        self.heartbeatDict[timeBucket] = [tupple]                        
+                    else:                                    
+                        self.heartbeatDict[timeBucket].append(tupple)                    
     
 
     def fillLocalErrorDict(self, fileName):
