@@ -25,7 +25,7 @@ class ClocksyncEvalLogAnalyzer():
     def loadHostFile(self):
         self.hosts = dict()
         id = 1
-        with open("/home/daniel/hosts") as f:
+        with open("hosts") as f:
             for line in f:
                 self.hosts[id] = line.strip()
                 id += 1
@@ -44,11 +44,13 @@ class ClocksyncEvalLogAnalyzer():
         self.scaleGlobalErrorTime()
         od = collections.OrderedDict(sorted(self.maxGlobalError.items()))
         self.maxGlobalError = od
+        od = collections.OrderedDict(sorted(self.heartbeatDict.items()))
+        self.heartbeatDict = od
 
-        print self.maxAdj
-        for relation in self.adjDict.keys():
-            self.adjDict[relation] /= self.maxAdj
-            print relation, ": ", self.adjDict[relation]
+        #print self.maxAdj
+        #for relation in self.adjDict.keys():
+        #    self.adjDict[relation] /= self.maxAdj
+        #    print relation, ": ", self.adjDict[relation]
 
     def getCalibrationOffset(self):
         calCount = self.avgLocalErrorToCalibration()   
