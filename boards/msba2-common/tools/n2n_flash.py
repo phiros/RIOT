@@ -129,6 +129,7 @@ if __name__ == "__main__":
         for node in flash.portlist :
             print "/dev/" + node
         if len(sys.argv)>1:
+            print "with: " + sys.argv[1]
             flash.doflash(sys.argv[1])
             print "\nFlash completed."
             sys.exit()

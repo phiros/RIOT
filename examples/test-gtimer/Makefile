@@ -1,5 +1,5 @@
 # name of your application
-export APPLICATION = timesync
+export APPLICATION = test-gtimer
 
 # If no BOARD is found in the environment, use this default:
 export BOARD ?= native
@@ -24,7 +24,8 @@ export RIOTBASE ?= $(CURDIR)/../..
 # development process:
 #CFLAGS += -DDEVELHELP
 
-#CFLAGS += -DGTSP_ENABLE_TRIGGER
+#export CFLAGS += -DGTSP_ENABLE_TRIGGER
+#export CFLAGS += -DGTIMER_USE_VTIMER
 
 export LINKFLAGS += -lm
 
@@ -36,7 +37,7 @@ export QUIET ?= 1
 USEMODULE += posix
 #USEMODULE += gtsp
 #USEMODULE += ftsp
-USEMODULE += pulsesync
+#USEMODULE += pulsesync
 USEMODULE += shell
 USEMODULE += shell_commands
 USEMODULE += ps

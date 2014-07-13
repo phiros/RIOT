@@ -3,11 +3,13 @@
 
 import os, re, math, sys, pylab
 import time, calendar, collections
+import numpy as np
 
 class ClocksyncEvalLogAnalyzer():
     def __init__(self, logdir = "", beginRe = ".*", endRe = ".*"):
         # Diconary: (sendingNode, receivingNode) -> Rate of transfered signals
         self.adjDict = dict()
+        self.heartBeatByIdDict = dict()
         self.maxAdj = 0.0
         # Diconary: ReceivingNode -> SendingNode (Int) -> TriggerId (Int) -> (Server Time, Global Time, Local Time)
         self.triggerDict = dict()
@@ -39,6 +41,7 @@ class ClocksyncEvalLogAnalyzer():
                     fileName = os.path.join(root, file)
                     self.analyzeTriggerEvents(fileName)
                     self.fillHeartbeatDict(fileName)
+                    self.fillHeartBeatByIdDict(fileName)
         self.triggerToMaxLocalError()
         self.heartBeatToGlobalError()
         od = collections.OrderedDict(sorted(self.localErrorMaxAvg.items()))
@@ -69,7 +72,7 @@ class ClocksyncEvalLogAnalyzer():
         timetuple = time.strptime(tempString.split(",")[0], "%Y-%m-%d %H:%M:%S")
         unixtime = float(calendar.timegm(timetuple))
         return (unixtime + millisecondPart)
-    
+
     def fillHeartbeatDict(self, fileName):
         bucketsize = self.heartBeatBucketSize # 10 seconds buckets
         logpats = r'(\S+)\s+(\S+).*\#eh, a: (\S+), gl: (\S+), gg: (\S+),.*'
@@ -113,8 +116,46 @@ class ClocksyncEvalLogAnalyzer():
                     if self.heartbeatDict.has_key(timeBucket):
                         self.heartbeatDict[timeBucket].append(tupple)                                       
                     else:
-                        self.heartbeatDict[timeBucket] = [tupple]                                             
-                         
+                        self.heartbeatDict[timeBucket] = [tupple]    
+                        
+    def fillHeartBeatByIdDict(self, fileName):
+        bucketsize = self.heartBeatBucketSize # 10 seconds buckets
+        logpats = r'(\S+)\s+(\S+).*\#eh, a: (\S+), gl: (\S+), gg: (\S+),.*'
+        hostpats = r'.*/(\S+)\.log'
+        endPats = r'' + self.endRe
+        beginPats = r'' + self.beginRe
+        logpat = re.compile(logpats)        
+        hostpat = re.compile(hostpats)        
+        beginpat = re.compile(beginPats)        
+        endpat = re.compile(endPats)
+        continueToRead = False
+        with open(fileName) as f:
+            hostMatch = hostpat.match(fileName)
+            if hostMatch:
+                hostName = hostMatch.groups()[0]
+            for line in f:
+                if endpat.match(line):
+                    break
+                if not continueToRead:
+                    if beginpat.match(line):
+                        continueToRead = True
+                    continue
+                
+                match = logpat.match(line)
+                if(match): 
+                    tuple = match.groups()
+                    serverDate = tuple[0]
+                    serverTime = tuple[1]
+                    serverTimeStamp = self.dateTimeToTimeStamp(serverDate, serverTime)*1000*1000
+                    sourceId = int(tuple[2])
+                    localTime = int(tuple[3])
+                    globalTime = int(tuple[4])
+                    globalServerDiff = serverTimeStamp - globalTime 
+                    tupple = (serverTimeStamp, globalServerDiff, localTime, globalTime)
+                    if self.heartBeatByIdDict.has_key(sourceId):
+                        self.heartBeatByIdDict[sourceId].append(tupple)                                       
+                    else:
+                        self.heartBeatByIdDict[sourceId] = [tupple]   
                         
     def heartBeatToGlobalError(self):
         self.globalMinBucket = sys.maxint

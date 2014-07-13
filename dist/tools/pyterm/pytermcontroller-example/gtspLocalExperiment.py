@@ -20,9 +20,9 @@ logFilePath = basePath + "/.pyterm/log"
 class GTSPLocalExperiment(LocalClockSyncExperiment):
     def enableProtocol(self):
         #self.sendToAll("gtsp delay 2240")
-        #self.sendToAll("gtsp delay 2220")
+        self.sendToAll("gtsp delay 2220")
         self.sendToAll("gtsp delay 0")
-        self.sendToAll("gtsp freq 10")
+        #self.sendToAll("gtsp freq 10")
         self.sendToAll("gtsp on")
         
     def disableProtocol(self):
@@ -34,6 +34,6 @@ class GTSPLocalExperiment(LocalClockSyncExperiment):
                
 testbed = LocalTestbed(serverHost, serverPort, flasher, hexFilePath
                        ,pyterm, logFilePath)
-#testbed.flashNodes()
+testbed.flashNodes()
 experiment = ExperimentRunner(GTSPLocalExperiment, testbed) 
 experiment.run()
