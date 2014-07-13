@@ -26,6 +26,7 @@ class ClocksyncEvalLogAnalyzer():
         self.globalMinDiff = sys.maxint
         self.hosts = self.loadHostFile()
         self.globalErrorFitFunctionsById = dict()
+        self.analyze()
 
     # Returns a dictornary NodeId (Int) -> NodeName (String)
     def loadHostFile(self):
