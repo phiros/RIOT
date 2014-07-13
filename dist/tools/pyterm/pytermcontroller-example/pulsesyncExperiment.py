@@ -22,11 +22,11 @@ class PulsesyncExperiment(ClockSyncExperiment):
     def preHook(self):
         self.readHostFile(hostFile)      
             
-    def enableGTSP(self):
+    def enableProtocol(self):
         self.sendToAll("pulsesync delay 2200")
         self.sendToAll("pulsesync on")
         
-    def disableGTSP(self):
+    def disableProtocol(self):
         self.sendToAll("pulsesync off")        
         
     def postHook(self): 
