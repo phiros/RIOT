@@ -7,6 +7,8 @@ sys.path.append(os.path.join(os.path.dirname(__file__), "../testbeds"))
 
 from pytermcontroller import Experiment, ExperimentRunner
 from testbeds import DESTestbed
+from clocksyncExperiment import ClockSyncExperiment
+
 
 serverHost =  "uhu"
 serverPort =  1025
