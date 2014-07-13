@@ -16,6 +16,8 @@ class ClocksyncEvalLogAnalyzer():
         self.heartbeatDict = dict()
         self.localErrorMaxAvg = dict()
         self.logdir = logdir
+        self.minBackboneTime = sys.maxint
+        self.maxBackboneTime = 0
         self.maxServerTime = 0
         self.beginRe = beginRe
         self.endRe = endRe
@@ -23,6 +25,7 @@ class ClocksyncEvalLogAnalyzer():
         self.maxGlobalError = dict()
         self.globalMinDiff = sys.maxint
         self.hosts = self.loadHostFile()
+        self.globalErrorFitFunctionsById = dict()
 
     # Returns a dictornary NodeId (Int) -> NodeName (String)
     def loadHostFile(self):
@@ -44,11 +47,12 @@ class ClocksyncEvalLogAnalyzer():
                     self.fillHeartBeatByIdDict(fileName)
         self.triggerToMaxLocalError()
         self.heartBeatToGlobalError()
+        self.globalServerDiffToFunctionFit()
         od = collections.OrderedDict(sorted(self.localErrorMaxAvg.items()))
         self.localErrorMaxAvg = od
         self.scaleGlobalErrorTime()
         od = collections.OrderedDict(sorted(self.maxGlobalError.items()))
-        self.maxGlobalError = od
+        self.maxGlobalError = od        
         od = collections.OrderedDict(sorted(self.heartbeatDict.items()))
         self.heartbeatDict = od
 
@@ -106,6 +110,12 @@ class ClocksyncEvalLogAnalyzer():
                     localTime = int(tuple[3])
                     globalTime = int(tuple[4])
                     globalServerDiff = serverTimeStamp - globalTime
+                    
+                    if serverTimeStamp > self.maxBackboneTime:
+                        self.maxBackboneTime = serverTimeStamp
+                    if serverTimeStamp < self.minBackboneTime:
+                        self.minBackboneTime = serverTimeStamp
+                    
                     if globalServerDiff < self.globalMinDiff:
                         self.globalMinDiff = globalServerDiff
                     timeBucket = int(math.floor(serverTimeStamp/bucketsize)*bucketsize)                   
@@ -158,7 +168,16 @@ class ClocksyncEvalLogAnalyzer():
                         self.heartBeatByIdDict[sourceId] = [tupple]   
       
     def globalServerDiffToFunctionFit(self):
-        for id, tupple in self.heartBeatByIdDict.items():
+        for id, tuppleList in self.heartBeatByIdDict.items():
+            xvals = []
+            yvals = []
+            for tupple in tuppleList:
+                serverTime = tupple[0]
+                globalServerDiff = tupple[1]
+                xvals.append(serverTime)
+                yvals.append(globalServerDiff)
+            fit, residual, _, _, _ =  np.polyfit(xvals, yvals, 1, full = True) # assume linear relationship
+            self.globalErrorFitFunctionsById[id] = (np.poly1d(fit), residual)               
             
                         
     def heartBeatToGlobalError(self):
