@@ -212,7 +212,7 @@ void pulsesync_driver_timestamp(uint8_t *ieee802154_frame, uint8_t frame_length)
                 frame_length);
         pulsesync_beacon_t *beacon = (pulsesync_beacon_t *) frame.payload;
         gtimer_sync_now(&now);
-        beacon->local = now.local;
+        beacon->local = now.local + _pulsesync_prop_time;
         beacon->offset = (int64_t) now.global - (int64_t) now.local;
         beacon->relative_rate = now.rate;
         memcpy(ieee802154_frame + hdrlen, beacon, sizeof(pulsesync_beacon_t));
@@ -259,7 +259,7 @@ static void send_beacon(uint64_t local, int64_t offset, float skew)
     pulsesync_beacon->id = radio_id;
     // TODO: do we need to add the transmission delay to the offset?
     pulsesync_beacon->offset = offset;
-    pulsesync_beacon->local = local;
+    pulsesync_beacon->local = local + _pulsesync_prop_time;
     pulsesync_beacon->relative_rate = skew;
     pulsesync_beacon->root = root_id;
     pulsesync_beacon->seq_number = seq_num;

@@ -23,6 +23,7 @@ class PulsesyncExperiment(ClockSyncExperiment):
         self.readHostFile(hostFile)      
             
     def enableGTSP(self):
+        self.sendToAll("pulsesync delay 2200")
         self.sendToAll("pulsesync on")
         
     def disableGTSP(self):

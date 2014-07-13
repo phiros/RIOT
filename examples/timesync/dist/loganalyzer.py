@@ -156,6 +156,10 @@ class ClocksyncEvalLogAnalyzer():
                         self.heartBeatByIdDict[sourceId].append(tupple)                                       
                     else:
                         self.heartBeatByIdDict[sourceId] = [tupple]   
+      
+    def globalServerDiffToFunctionFit(self):
+        for id, tupple in self.heartBeatByIdDict.items():
+            
                         
     def heartBeatToGlobalError(self):
         self.globalMinBucket = sys.maxint

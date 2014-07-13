@@ -41,6 +41,19 @@ void _pulsesync(int argc, char **argv)
             return;
         }
     }
+    if (argc == 3)
+    {
+        if (!strcmp(argv[1], "delay"))
+        {
+            pulsesync_set_prop_time((uint32_t) atoi(argv[2]));
+            return;
+        }
+        if (!strcmp(argv[1], "freq"))
+        {
+            pulsesync_set_beacon_delay((uint32_t) atoi(argv[2]));
+            return;
+        }
+    }
     _print_help();
 }
 
