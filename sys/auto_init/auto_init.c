@@ -51,6 +51,10 @@
 #include "gtimer.h"
 #endif
 
+#ifdef MODULE_GTSP
+#include "clocksync/gtsp.h"
+#endif
+
 #ifdef MODULE_RTC
 #include "rtc.h"
 #endif
@@ -191,5 +195,9 @@ void auto_init(void)
 #ifdef MODULE_DESTINY
     DEBUG("Auto init transport layer [destiny] module.\n");
     destiny_init_transport_layer();
+#endif
+#ifdef MODULE_GTSP
+    DEBUG("Auto init gtsp clock sync module.\n");
+    gtsp_init();
 #endif
 }
