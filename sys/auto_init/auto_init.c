@@ -59,6 +59,10 @@
 #include "clocksync/ftsp.h"
 #endif
 
+#ifdef MODULE_PULSESYNC
+#include "clocksync/pulsesync.h"
+#endif
+
 #ifdef MODULE_RTC
 #include "rtc.h"
 #endif
@@ -207,5 +211,9 @@ void auto_init(void)
 #ifdef MODULE_FTSP
     DEBUG("Auto init ftsp clock sync module.\n");
     ftsp_init();
+#endif
+#ifdef MODULE_PULSESYNC
+    DEBUG("Auto init pulsesync clock sync module.\n");
+    pulsesync_init();
 #endif
 }
