@@ -116,7 +116,7 @@ void pulsesync_init(void)
 void pulsesync_mac_read(uint8_t *frame_payload, uint16_t src,
         gtimer_timeval_t *toa)
 {
-    DEBUG("pulsesync_mac_read");
+    puts("pulsesync_mac_read");
     mutex_lock(&pulsesync_mutex);
     pulsesync_beacon_t *beacon = (pulsesync_beacon_t *) frame_payload;
 
@@ -151,6 +151,7 @@ void pulsesync_mac_read(uint8_t *frame_payload, uint16_t src,
     timex_t wait = timex_from_uint64(genrand_uint32() % PULSESYNC_BEACON_PROPAGATION_DELAY);
     
     vtimer_set_wakeup(&beacon_timer, wait, beacon_thread_id);
+    puts("pulsesync_mac_read end");
 }
 
 void pulsesync_set_beacon_delay(uint32_t delay_in_sec)
@@ -198,7 +199,7 @@ void pulsesync_resume(void)
                 "pulsesync_beacon");
     }
 
-    DEBUG("PULSESYNC enabled");
+    puts("PULSESYNC enabled");
 }
 
 void pulsesync_driver_timestamp(uint8_t *ieee802154_frame, uint8_t frame_length)
@@ -238,7 +239,7 @@ static void *beacon_thread(void *arg)
             vtimer_set_wakeup(&beacon_timer, timex_from_uint64(beacon_interval), beacon_thread_id);
         }
         thread_sleep();
-        DEBUG("beacon_thread locking mutex\n");
+        puts("beacon_thread locking mutex\n");
         mutex_lock(&pulsesync_mutex);
         memset(pulsesync_beacon_buffer, 0, sizeof(pulsesync_beacon_t));
         if (!protocol_pause)
@@ -248,14 +249,14 @@ static void *beacon_thread(void *arg)
             send_beacon(now.local, (int64_t)now.global - (int64_t)now.local, now.rate);
         }
         mutex_unlock(&pulsesync_mutex);
-        DEBUG("beacon_thread: mutex unlocked\n");
+        puts("beacon_thread: mutex unlocked\n");
     }
     return NULL;
 }
 
 static void send_beacon(uint64_t local, int64_t offset, float skew)
 {
-    DEBUG("_pulsesync_send_beacon\n");
+    puts("send_beacon\n");
     gtimer_timeval_t now;
     pulsesync_beacon_t *pulsesync_beacon =
             (pulsesync_beacon_t *) pulsesync_beacon_buffer;
@@ -275,6 +276,7 @@ static void send_beacon(uint64_t local, int64_t offset, float skew)
     sixlowpan_mac_send_ieee802154_frame(0, NULL, 8, pulsesync_beacon_buffer,
             sizeof(pulsesync_beacon_t), 1);
     seq_num++;
+    puts("send_beacon end\n");
 }
 
 static void calculate_conversion(void)
@@ -324,7 +326,7 @@ static void calculate_conversion(void)
 
     num_entries = table_entries;
 
-    DEBUG("PULSESYNC conversion calculated: num_entries=%u, is_synced=%u\n",
+    printf("PULSESYNC conversion calculated: num_entries=%u, is_synced=%u\n",
             num_entries, pulsesync_is_synced());
 }
 
