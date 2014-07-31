@@ -13,7 +13,7 @@ serverHost =  "localhost"
 serverPort =  1025
 basePath =    "/home/philipp"
 flasher =     basePath + "/RIOT/boards/msba2-common/tools/n2n_flash.py"
-hexFilePath = basePath + "/RIOT/examples/timesync/bin/avsextrem/timesync.hex"
+hexFilePath = basePath + "/RIOT/examples/clocksync/bin/avsextrem/clocksync.hex"
 pyterm =      basePath + "/RIOT/dist/tools/pyterm/pyterm.py -s " + serverHost + " -P " + str(serverPort) 
 logFilePath = basePath + "/.pyterm/log"
 
@@ -21,7 +21,6 @@ class GTSPLocalExperiment(LocalClockSyncExperiment):
     def enableProtocol(self):
         #self.sendToAll("gtsp delay 2240")
         self.sendToAll("gtsp delay 2220")
-        self.sendToAll("gtsp delay 0")
         #self.sendToAll("gtsp freq 10")
         self.sendToAll("gtsp on")
         

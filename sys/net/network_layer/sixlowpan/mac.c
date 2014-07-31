@@ -52,7 +52,7 @@
 #ifdef MODULE_PULSESYNC
 #include "clocksync/pulsesync.h"
 #endif
-#ifdef MODULE_PULSESYNC
+#ifdef MODULE_CLOCKSYNC_EVAL
 #include "clocksync/clocksync_eval.h"
 #endif
 

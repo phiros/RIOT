@@ -13,7 +13,7 @@ serverHost =  "localhost"
 serverPort =  1025
 basePath =    "/home/philipp"
 flasher =     basePath + "/RIOT/boards/msba2-common/tools/n2n_flash.py"
-hexFilePath = basePath + "/RIOT/examples/timesync/bin/avsextrem/timesync.hex"
+hexFilePath = basePath + "/RIOT/examples/clocksync/bin/avsextrem/clocksync.hex"
 pyterm =      basePath + "/RIOT/dist/tools/pyterm/pyterm.py -s " + serverHost + " -P " + str(serverPort) 
 logFilePath = basePath + "/.pyterm/log"
 
