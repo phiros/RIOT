@@ -92,6 +92,13 @@ ifneq (,$(filter pulsesync,$(USEMODULE)))
 	USEMODULE += random
 endif
 
+ifneq (,$(filter clocksync_eval,$(USEMODULE)))
+	USEMODULE += sixlowpan
+	USEMODULE += ieee802154
+	USEMODULE += gtimer
+	USEMODULE += random
+endif
+
 ifneq (,$(filter net_if,$(USEMODULE)))
 	USEMODULE += transceiver
 	USEMODULE += net_help

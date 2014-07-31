@@ -56,6 +56,7 @@ ifneq (,$(filter avsextrem,$(BOARD)))
 	USEMODULE += config
 	USEMODULE += random
 	USEMODULE += pulsesync
+	USEMODULE += clocksync_eval
 endif
 ifneq (,$(filter native,$(BOARD)))
 	USEMODULE += ltc4150

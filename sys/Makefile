@@ -79,6 +79,9 @@ endif
 ifneq (,$(filter pulsesync,$(USEMODULE)))
     DIRS += net/clocksync/pulsesync
 endif
+ifneq (,$(filter clocksync_eval,$(USEMODULE)))
+    DIRS += net/clocksync/clocksync_eval
+endif
 ifneq (,$(filter bloom,$(USEMODULE)))
     DIRS += bloom
 endif

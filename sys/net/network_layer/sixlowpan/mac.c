@@ -52,6 +52,9 @@
 #ifdef MODULE_PULSESYNC
 #include "clocksync/pulsesync.h"
 #endif
+#ifdef MODULE_PULSESYNC
+#include "clocksync/clocksync_eval.h"
+#endif
 
 #define RADIO_STACK_SIZE            (KERNEL_CONF_STACKSIZE_MAIN)
 #define RADIO_RCV_BUF_SIZE          (64)
@@ -188,6 +191,13 @@ static void *recv_ieee802154_frame(void *arg)
                 DEBUG("pulsesync packet received");
                 gtimer_timeval_t gtimer_toa = p->toa;
                 pulsesync_mac_read(frame.payload, p->src, &gtimer_toa);
+            }
+#endif
+#ifdef MODULE_CLOCKSYNC_EVAL
+            else if(dispatch_header == CLOCKSYNC_EVAL_PROTOCOL_DISPATCH) {
+                DEBUG("clocksync_eval packet received");
+                gtimer_timeval_t gtimer_toa = p->toa;
+                clocksync_eval_mac_read(frame.payload, p->src, &gtimer_toa);
             }
 #endif
             p->processing--;
