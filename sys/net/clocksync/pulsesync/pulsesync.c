@@ -108,6 +108,7 @@ void pulsesync_init(void)
     clear_table();
     heart_beats = 0;
     num_errors = 0;
+    beacon_thread_id = 0;
 
     puts("PULSESYNC initialized");
 }
@@ -229,6 +230,7 @@ int pulsesync_is_synced(void)
 
 static void *beacon_thread(void *arg)
 {
+    beacon_thread_id = thread_getpid();
     while (1)
     {
         if (node_id == root_id)
