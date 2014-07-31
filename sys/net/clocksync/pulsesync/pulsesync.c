@@ -53,7 +53,7 @@
 
 // Protocol parameters
 #define PULSESYNC_PREFERRED_ROOT (1) // node with id==1 will become root
-#define PULSESYNC_BEACON_INTERVAL (5 * 1000 * 1000) // in us
+#define PULSESYNC_BEACON_INTERVAL ((uint32_t) 5 * 1000 * 1000) // in us
 
 // In order to reduce the likelihood of a package collision during the
 // propagation of a beacon every node has to wait a random time before
@@ -167,7 +167,7 @@ void pulsesync_set_prop_time(uint32_t us)
 void pulsesync_pause(void)
 {
     protocol_pause = true;
-    DEBUG("PULSESYNC disabled");
+    DEBUG("pulsesync disabled");
 }
 
 void pulsesync_resume(void)
@@ -199,7 +199,7 @@ void pulsesync_resume(void)
                 "pulsesync_beacon");
     }
 
-    puts("PULSESYNC enabled");
+    puts("pulsesync enabled");
 }
 
 void pulsesync_driver_timestamp(uint8_t *ieee802154_frame, uint8_t frame_length)
@@ -236,8 +236,10 @@ static void *beacon_thread(void *arg)
     {
         if (node_id == root_id)
         {
+            puts("before vtimer_set_wakeup");
             vtimer_set_wakeup(&beacon_timer, timex_from_uint64(beacon_interval), beacon_thread_id);
         }
+        puts("before thread_sleep");
         thread_sleep();
         puts("beacon_thread locking mutex\n");
         mutex_lock(&pulsesync_mutex);
