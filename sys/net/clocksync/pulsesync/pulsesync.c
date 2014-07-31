@@ -189,7 +189,7 @@ void pulsesync_resume(void)
 
     protocol_pause = false;
 
-    if (beacon_thread_id == 0 && (root_id == node_id))
+    if (beacon_thread_id == 0)
     {
         beacon_thread_id = thread_create(beacon_stack,
         PULSESYNC_BEACON_STACK_SIZE,
@@ -231,7 +231,8 @@ static void *beacon_thread(void *arg)
 {
     while (1)
     {
-        if (node_id == root_id) {
+        if (node_id == root_id)
+        {
             vtimer_set_wakeup(&beacon_timer, timex_from_uint64(beacon_interval), beacon_thread_id);
         }
         thread_sleep();
