@@ -254,6 +254,7 @@ static uint16_t get_transceiver_addr(void)
     }
 
     tcmd.transceivers = TRANSCEIVER_DEFAULT;
+    tcmd.data = &a;
     mesg.content.ptr = (char *) &tcmd;
     mesg.type = GET_ADDRESS;
 
