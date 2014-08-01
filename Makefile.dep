@@ -76,7 +76,8 @@ endif
 ifneq (,$(filter gtsp,$(USEMODULE)))
 	USEMODULE += sixlowpan
 	USEMODULE += ieee802154
-	SEMODULE += gtimer
+	USEMODULE += gtimer
+	USEMUDULE += random
 endif
 
 ifneq (,$(filter ftsp,$(USEMODULE)))
