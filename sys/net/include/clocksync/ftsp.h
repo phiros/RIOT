@@ -33,26 +33,24 @@
 #include "radio/types.h"
 
 typedef struct  __attribute__((packed)) {
-	uint8_t dispatch_marker; // << protocol marker
+    uint8_t dispatch_marker; // << protocol marker
     uint16_t id;
     uint16_t root;
     uint16_t seq_number;
-    uint64_t local;
-    int64_t offset;
-    float relative_rate; // << sender logical clockrate
+    uint64_t global;
 } ftsp_beacon_t;
 
 
 typedef struct ftsp_sync_point {
     uint16_t src; // TODO: only for debugging
     uint64_t local;
-    int64_t offset;
+    int64_t global;
 } ftsp_sync_point_t;
 
 enum
 {
-  FTSP_OK = 1,
-  FTSP_ERR = 0,
+    FTSP_OK = 1,
+    FTSP_ERR = 0,
 };
 
 enum
@@ -73,11 +71,10 @@ enum
 
 typedef struct table_item
 {
-    uint8_t             state;
-    uint64_t            local_time;
-    int64_t             time_offset;        // global-time - local_time
+    uint8_t state;
+    uint64_t local;
+    int64_t time;
 } table_item;
-
 
 
 

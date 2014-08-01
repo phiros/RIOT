@@ -191,10 +191,7 @@ static void send_beacon(void)
             gtimer_sync_now(&now);
             ftsp_beacon->dispatch_marker = FTSP_PROTOCOL_DISPATCH;
             ftsp_beacon->id = node_id;
-            // TODO: do we need to add the transmission delay to the offset?
-            ftsp_beacon->offset = (int64_t) now.global - (int64_t) now.local;
-            ftsp_beacon->local = now.local + transmission_delay;
-            ftsp_beacon->relative_rate = now.rate;
+            ftsp_beacon->global = now.global;
             ftsp_beacon->root = root_id;
             ftsp_beacon->seq_number = seq_num;
 #ifdef DEBUG_ENABLED
@@ -331,9 +328,7 @@ void ftsp_driver_timestamp(uint8_t *ieee802154_frame, uint8_t frame_length)
                 frame_length);
         ftsp_beacon_t *beacon = (ftsp_beacon_t *) frame.payload;
         gtimer_sync_now(&now);
-        beacon->local = now.local + transmission_delay;
-        beacon->offset = (int64_t) now.global - (int64_t) now.local;
-        beacon->relative_rate = now.rate;
+        beacon->global = now.global;
         memcpy(ieee802154_frame + hdrlen, beacon, sizeof(ftsp_beacon_t));
     }
 
@@ -484,10 +479,7 @@ static void print_beacon(ftsp_beacon_t *beacon)
     printf("\t id: %"PRIu16"\n", beacon->id);
     printf("\t root: %"PRIu16"\n", beacon->root);
     printf("\t seq_number: %"PRIu16"\n", beacon->seq_number);
-    printf("\t local: %s\n", l2s(beacon->local, X64LL_SIGNED, buf));
-    printf("\t offset: %s\n", l2s(beacon->offset, X64LL_SIGNED, buf));
-    printf("\t relative_rate: %"PRId32"\n----\n",
-            (int32_t) (beacon->relative_rate * 1000 * 1000 * 1000));
+    printf("\t global: %s\n", l2s(beacon->global, X64LL_SIGNED, buf));
 }
 */
 #endif /* DEBUG_ENABLED */
