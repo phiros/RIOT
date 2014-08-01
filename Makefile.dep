@@ -83,6 +83,7 @@ ifneq (,$(filter ftsp,$(USEMODULE)))
 	USEMODULE += sixlowpan
 	USEMODULE += ieee802154
 	USEMODULE += gtimer
+	USEMUDULE += random
 endif
 
 ifneq (,$(filter pulsesync,$(USEMODULE)))
