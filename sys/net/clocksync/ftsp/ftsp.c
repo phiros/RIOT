@@ -34,10 +34,10 @@
 //#include "x64toa.h"
 
 #ifdef MODULE_CC110X_NG
-#define FTSP_CALIBRATION_OFFSET ((uint32_t) 2300)
+#define FTSP_CALIBRATION_OFFSET ((uint32_t) 0)
 
 #elif MODULE_NATIVENET
-#define FTSP_CALIBRATION_OFFSET ((uint32_t) 1500)
+#define FTSP_CALIBRATION_OFFSET ((uint32_t) 0)
 
 #else
 #warning "Transceiver not supported by FTSP!"
@@ -52,7 +52,7 @@
 
 // Protocol parameters
 #define FTSP_PREFERRED_ROOT (1) // node with id==1 will become root
-#define FTSP_BEACON_INTERVAL (5 * 1000 * 1000) // in us
+#define FTSP_BEACON_INTERVAL (30 * 1000 * 1000) // in us
 
 
 #define FTSP_BEACON_STACK_SIZE (KERNEL_CONF_STACKSIZE_PRINTF_FLOAT)

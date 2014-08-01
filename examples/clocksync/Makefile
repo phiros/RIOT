@@ -49,7 +49,8 @@ ifneq (,$(filter msba2,$(BOARD)))
 	USEMODULE += mci
 	USEMODULE += config
 	USEMODULE += random
-	USEMODULE += pulsesync
+	USEMODULE += ftsp
+	USEMODULE += clocksync_eval
 endif
 ifneq (,$(filter avsextrem,$(BOARD)))
 	USEMODULE += rtc

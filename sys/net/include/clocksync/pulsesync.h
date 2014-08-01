@@ -43,12 +43,6 @@ typedef struct  __attribute__((packed)) {
 } pulsesync_beacon_t;
 
 
-typedef struct pulsesync_sync_point {
-    uint16_t src; // TODO: only for debugging
-    uint64_t local;
-    int64_t offset;
-} pulsesync_sync_point_t;
-
 enum
 {
   PULSESYNC_OK = 1,
@@ -62,7 +56,7 @@ enum
     PULSESYNC_IGNORE_ROOT_MSG       = 4,              // after becoming the root ignore other roots messages (in send period)
     PULSESYNC_ENTRY_VALID_LIMIT     = 4,              // number of entries to become synchronized
     PULSESYNC_ENTRY_SEND_LIMIT      = 3,              // number of entries to send sync messages
-    PULSESYNC_ENTRY_THROWOUT_LIMIT  = 300,             // if time sync error is bigger than this (in 32 kHz ticks) clear the table
+    PULSESYNC_ENTRY_THROWOUT_LIMIT  = 300,             // if time sync error is bigger than this clear the table
 };
 
 enum
@@ -73,9 +67,9 @@ enum
 
 typedef struct table_item
 {
-    uint8_t             state;
-    uint64_t local_time;
-    int64_t                time_offset;        // global-time - local_time
+    uint8_t     state;
+    uint64_t    local_time;
+    int64_t     time_offset;        // global_time - local_time
 } table_item;
 
 

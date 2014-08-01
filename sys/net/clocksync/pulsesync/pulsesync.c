@@ -35,10 +35,10 @@
 //#include "x64toa.h"
 
 #ifdef MODULE_CC110X_NG
-#define PULSESYNC_CALIBRATION_OFFSET ((uint32_t) 2300)
+#define PULSESYNC_CALIBRATION_OFFSET ((uint32_t) 0)
 
 #elif MODULE_NATIVENET
-#define PULSESYNC_CALIBRATION_OFFSET ((uint32_t) 1500)
+#define PULSESYNC_CALIBRATION_OFFSET ((uint32_t) 0)
 
 #else
 #warning "Transceiver not supported by PulseSync!"
@@ -53,12 +53,12 @@
 
 // Protocol parameters
 #define PULSESYNC_PREFERRED_ROOT (1) // node with id==1 will become root
-#define PULSESYNC_BEACON_INTERVAL (5 * 1000 * 1000) // in us
+#define PULSESYNC_BEACON_INTERVAL (30 * 1000 * 1000) // in us
 
 // In order to reduce the likelihood of a package collision during the
 // propagation of a beacon every node has to wait a random time before
 // sending the beacon.
-#define PULSESYNC_BEACON_PROPAGATION_DELAY 1000
+#define PULSESYNC_BEACON_PROPAGATION_DELAY (10*1000)
 
 #define PULSESYNC_BEACON_STACK_SIZE (KERNEL_CONF_STACKSIZE_PRINTF_FLOAT)
 #define PULSESYNC_BEACON_BUFFER_SIZE (64)
@@ -79,7 +79,7 @@ static char beacon_stack[PULSESYNC_BEACON_STACK_SIZE];
 char pulsesync_beacon_buffer[PULSESYNC_BEACON_BUFFER_SIZE] =
 { 0 };
 
-static int8_t i, free_item, oldest_item;
+static int8_t free_item, oldest_item;
 static uint64_t local_average, age, oldest_time;
 static uint8_t num_entries, table_entries, heart_beats, num_errors, seq_num;
 static int64_t offset_average, time_error, a, b;
@@ -280,6 +280,7 @@ static void send_beacon(uint64_t local, int64_t offset, float skew)
 static void calculate_conversion(void)
 {
     DEBUG("calculate_conversion");
+    int8_t i;
     for (i = 0;
             (i < PULSESYNC_MAX_ENTRIES)
                     && (table[i].state != PULSESYNC_ENTRY_FULL); ++i)
@@ -400,7 +401,7 @@ static void add_new_entry(pulsesync_beacon_t *beacon, gtimer_timeval_t *toa)
 
 static void clear_table(void)
 {
-    for (i = 0; i < PULSESYNC_MAX_ENTRIES; ++i)
+    for (int8_t i = 0; i < PULSESYNC_MAX_ENTRIES; ++i)
         table[i].state = PULSESYNC_ENTRY_EMPTY;
 
     num_entries = 0;
