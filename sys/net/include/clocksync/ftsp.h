@@ -73,7 +73,7 @@ typedef struct table_item
 {
     uint8_t state;
     uint64_t local;
-    int64_t time;
+    uint64_t global;
 } table_item;
 
 

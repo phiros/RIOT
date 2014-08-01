@@ -53,10 +53,11 @@
 // Protocol parameters
 #define FTSP_PREFERRED_ROOT (1) // node with id==1 will become root
 #define FTSP_BEACON_INTERVAL (5 * 1000 * 1000) // 5 sec in us
+#define FTSP_MAX_SYNC_POINT_AGE (20 * 60 * 1000 * 1000) // 20 min in us
+
 #define FTSP_BEACON_STACK_SIZE (KERNEL_CONF_STACKSIZE_PRINTF_FLOAT)
 #define FTSP_CYCLIC_STACK_SIZE (KERNEL_CONF_STACKSIZE_PRINTF_FLOAT)
 #define FTSP_BEACON_BUFFER_SIZE (64)
-#define FTSP_MAX_SYNC_POINT_AGE (20 * 60 * 1000 * 1000) // 20 min in us
 
 // threads
 static void *beacon_thread(void *arg);
@@ -78,11 +79,10 @@ char ftsp_cyclic_stack[FTSP_CYCLIC_STACK_SIZE];
 char ftsp_beacon_buffer[FTSP_BEACON_BUFFER_SIZE] =
 { 0 };
 
-static int8_t i, free_item, oldest_item;
-static uint64_t local_average, age;
-static uint8_t num_entries, table_entries, heart_beats, num_errors, seq_num;
-static int64_t offset_average, a, b;
-static int64_t local_sum, offset_sum;
+static int8_t i, free_item;
+static uint64_t local_average;
+static uint8_t table_entries, heart_beats, num_errors, seq_num;
+static int64_t offset_average;
 static int64_t offset;
 static float skew;
 static table_item table[FTSP_MAX_ENTRIES];
@@ -182,7 +182,7 @@ static void send_beacon(void)
         //          }
         //      }
 
-        if ((num_entries < FTSP_ENTRY_SEND_LIMIT) && (root_id != node_id))
+        if ((table_entries < FTSP_ENTRY_SEND_LIMIT) && (root_id != node_id))
         {
             ++heart_beats;
         }
@@ -249,23 +249,10 @@ void ftsp_mac_read(uint8_t *frame_payload, uint16_t src, gtimer_timeval_t *toa)
         heart_beats = 0;
 
     add_new_entry(beacon, toa);
-    calculate_conversion();
-
-    gtimer_timeval_t now;
-    gtimer_sync_now(&now);
-    int64_t local_diff = (int64_t) table[free_item].local_time - local_average;
-
-    int64_t offset_diff = skew * local_diff;
-
-    int64_t offset_estimated = offset_average + offset_diff;
-
-    int64_t offset_now = (int64_t) now.global - (int64_t) now.local;
-
-    int64_t offset = offset_estimated - offset_now;
+    linear_regression();
 
     gtimer_sync_set_global_offset(offset);
     gtimer_sync_set_relative_rate(skew);
-    gtimer_sync_now(&now);
 
     mutex_unlock(&ftsp_mutex);
 }
@@ -336,7 +323,7 @@ void ftsp_driver_timestamp(uint8_t *ieee802154_frame, uint8_t frame_length)
 
 int ftsp_is_synced(void)
 {
-    if ((num_entries >= FTSP_ENTRY_VALID_LIMIT) || (root_id == node_id))
+    if ((table_entries >= FTSP_ENTRY_VALID_LIMIT) || (root_id == node_id))
         return FTSP_OK;
     else
         return FTSP_ERR;
@@ -376,7 +363,7 @@ static void linear_regression(void)
 static void add_new_entry(ftsp_beacon_t *beacon, gtimer_timeval_t *toa)
 {
     free_item = -1;
-    uint8_t oldest_item;
+    uint8_t oldest_item = 0;
     uint64_t oldest_time = UINT64_MAX;
     uint64_t limit_age = toa->local - FTSP_MAX_SYNC_POINT_AGE;
     // surround errors at the beginning
@@ -442,7 +429,7 @@ static void clear_table(void)
     for (i = 0; i < FTSP_MAX_ENTRIES; ++i)
         table[i].state = FTSP_ENTRY_EMPTY;
 
-    num_entries = 0;
+    table_entries = 0;
 }
 
 #ifdef DEBUG_ENABLED
