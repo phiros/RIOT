@@ -53,7 +53,7 @@
 
 // Protocol parameters
 #define PULSESYNC_PREFERRED_ROOT (1) // node with id==1 will become root
-#define PULSESYNC_BEACON_INTERVAL (5 * 1000 * 1000) // in us
+#define PULSESYNC_BEACON_INTERVAL (5) // in seconds
 
 // In order to reduce the likelihood of a package collision during the
 // propagation of a beacon every node has to wait a random time before
@@ -68,7 +68,7 @@ static void send_beacon(uint64_t local, int64_t offset, float skew);
 
 static int beacon_thread_id = 0;
 static vtimer_t beacon_timer;
-static uint32_t beacon_interval = PULSESYNC_BEACON_INTERVAL;
+static timex_t beacon_interval = timex_set(PULSESYNC_BEACON_INTERVAL, 0);
 static uint32_t transmission_delay = PULSESYNC_CALIBRATION_OFFSET;
 static bool protocol_pause = true;
 
@@ -155,7 +155,7 @@ void pulsesync_mac_read(uint8_t *frame_payload, uint16_t src,
 
 void pulsesync_set_beacon_delay(uint32_t delay_in_sec)
 {
-    beacon_interval = delay_in_sec * 1000 * 1000;
+    beacon_interval = timex_set(delay_in_sec);
 }
 
 void pulsesync_set_prop_time(uint32_t us)
@@ -235,7 +235,7 @@ static void *beacon_thread(void *arg)
     {
         if (node_id == root_id)
         {
-            vtimer_set_wakeup(&beacon_timer, timex_from_uint64(beacon_interval), beacon_thread_id);
+            vtimer_set_wakeup(&beacon_timer, beacon_interval, beacon_thread_id);
         }
         thread_sleep();
         DEBUG("beacon_thread locking mutex\n");
