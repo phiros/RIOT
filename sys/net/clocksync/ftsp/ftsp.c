@@ -53,8 +53,6 @@
 // Protocol parameters
 #define FTSP_PREFERRED_ROOT (1) // node with id==1 will become root
 #define FTSP_BEACON_INTERVAL (5 * 1000 * 1000) // in us
-
-
 #define FTSP_BEACON_STACK_SIZE (KERNEL_CONF_STACKSIZE_PRINTF_FLOAT)
 #define FTSP_CYCLIC_STACK_SIZE (KERNEL_CONF_STACKSIZE_PRINTF_FLOAT)
 #define FTSP_BEACON_BUFFER_SIZE (64)
@@ -84,18 +82,19 @@ static uint64_t local_average, age, oldest_time;
 static uint8_t num_entries, table_entries, heart_beats, num_errors, seq_num;
 static int64_t offset_average, time_error, a, b;
 static int64_t local_sum, offset_sum;
+static int64_t offset;
 static float skew;
 static table_item table[FTSP_MAX_ENTRIES];
 
 static void clear_table(void);
 static void add_new_entry(ftsp_beacon_t *beacon, gtimer_timeval_t *toa);
-static void calculate_conversion(void);
+static void linear_regression(void);
 static uint16_t get_transceiver_addr(void);
 /*
-#ifdef DEBUG_ENABLED
-static void print_beacon(ftsp_beacon_t *beacon);
-#endif
-*/
+ #ifdef DEBUG_ENABLED
+ static void print_beacon(ftsp_beacon_t *beacon);
+ #endif
+ */
 
 mutex_t ftsp_mutex;
 
@@ -196,8 +195,8 @@ static void send_beacon(void)
             ftsp_beacon->seq_number = seq_num;
 #ifdef DEBUG_ENABLED
             /*
-            print_beacon(ftsp_beacon);
-            */
+             print_beacon(ftsp_beacon);
+             */
 #endif
             sixlowpan_mac_send_ieee802154_frame(0, NULL, 8, ftsp_beacon_buffer,
                     sizeof(ftsp_beacon_t), 1);
@@ -342,52 +341,30 @@ int ftsp_is_synced(void)
         return FTSP_ERR;
 }
 
-static void calculate_conversion(void)
+static void linear_regression(void)
 {
     DEBUG("calculate_conversion");
-    for (i = 0; (i < FTSP_MAX_ENTRIES) && (table[i].state != FTSP_ENTRY_FULL); ++i)
-        ;
+    int64_t sum_local = 0, sum_global = 0, covariance = 0, sum_global_squared = 0;
 
-    if (i >= FTSP_MAX_ENTRIES)
-        return;   // table is empty
+    if (table_entries == 0)
+        return;
 
-    local_average = table[i].local_time;
-    offset_average = table[i].time_offset;
-
-    local_sum = 0;
-    offset_sum = 0;
-
-    while (++i < FTSP_MAX_ENTRIES)
+    for (i = 0; i < FTSP_MAX_ENTRIES; i++)
     {
         if (table[i].state == FTSP_ENTRY_FULL)
         {
-            local_sum += (long) (table[i].local_time - local_average)
-                    / table_entries;
-            offset_sum += (long) (table[i].time_offset - offset_average)
-                    / table_entries;
+            sum_local += table[i].local;
+            sum_global += table[i].global;
+            sum_global_squared += table[i].global * table[i].global;
+            covariance += table[i].local * table[i].global;
         }
     }
 
-    local_average += local_sum;
-    offset_average += offset_sum;
+    skew = (covariance - (sum_global * sum_local) / table_entries);
+    skew /= (sum_global_squared - ((sum_global * sum_local) / table_entries));
+    skew -= 1;
 
-    local_sum = offset_sum = 0;
-    for (i = 0; i < FTSP_MAX_ENTRIES; ++i)
-    {
-        if (table[i].state == FTSP_ENTRY_FULL)
-        {
-            a = table[i].local_time - local_average;
-            b = table[i].time_offset - offset_average;
-
-            local_sum += (long long) a * a;
-            offset_sum += (long long) a * b;
-        }
-    }
-
-    if (local_sum != 0)
-        skew = (float) offset_sum / (float) local_sum;
-
-    num_entries = table_entries;
+    offset = (sum_local - skew * sum_global) / table_entries;
 
     DEBUG("FTSP conversion calculated: num_entries=%u, is_synced=%u\n",
             num_entries, ftsp_is_synced());
@@ -407,11 +384,11 @@ static void add_new_entry(ftsp_beacon_t *beacon, gtimer_timeval_t *toa)
     if (ftsp_is_synced() == FTSP_OK)
     {
         /*
-#ifdef DEBUG_ENABLED
-        char buf[60];
-        DEBUG("FTSP synced, error %s\n", l2s(time_error, X64LL_SIGNED, buf));
-#endif
-    */
+         #ifdef DEBUG_ENABLED
+         char buf[60];
+         DEBUG("FTSP synced, error %s\n", l2s(time_error, X64LL_SIGNED, buf));
+         #endif
+         */
         if ((time_error > FTSP_ENTRY_THROWOUT_LIMIT)
                 || (-time_error > FTSP_ENTRY_THROWOUT_LIMIT))
         {
@@ -472,18 +449,17 @@ static void clear_table(void)
 
 #ifdef DEBUG_ENABLED
 /*
-static void print_beacon(ftsp_beacon_t *beacon)
-{
-    char buf[66];
-    printf("----\nbeacon: \n");
-    printf("\t id: %"PRIu16"\n", beacon->id);
-    printf("\t root: %"PRIu16"\n", beacon->root);
-    printf("\t seq_number: %"PRIu16"\n", beacon->seq_number);
-    printf("\t global: %s\n", l2s(beacon->global, X64LL_SIGNED, buf));
-}
-*/
+ static void print_beacon(ftsp_beacon_t *beacon)
+ {
+ char buf[66];
+ printf("----\nbeacon: \n");
+ printf("\t id: %"PRIu16"\n", beacon->id);
+ printf("\t root: %"PRIu16"\n", beacon->root);
+ printf("\t seq_number: %"PRIu16"\n", beacon->seq_number);
+ printf("\t global: %s\n", l2s(beacon->global, X64LL_SIGNED, buf));
+ }
+ */
 #endif /* DEBUG_ENABLED */
-
 
 static uint16_t get_transceiver_addr(void)
 {

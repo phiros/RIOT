@@ -44,7 +44,7 @@ typedef struct  __attribute__((packed)) {
 typedef struct ftsp_sync_point {
     uint16_t src; // TODO: only for debugging
     uint64_t local;
-    int64_t global;
+    uint64_t global;
 } ftsp_sync_point_t;
 
 enum
