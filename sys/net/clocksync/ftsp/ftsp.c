@@ -52,10 +52,11 @@
 
 // Protocol parameters
 #define FTSP_PREFERRED_ROOT (1) // node with id==1 will become root
-#define FTSP_BEACON_INTERVAL (5 * 1000 * 1000) // in us
+#define FTSP_BEACON_INTERVAL (5 * 1000 * 1000) // 5 sec in us
 #define FTSP_BEACON_STACK_SIZE (KERNEL_CONF_STACKSIZE_PRINTF_FLOAT)
 #define FTSP_CYCLIC_STACK_SIZE (KERNEL_CONF_STACKSIZE_PRINTF_FLOAT)
 #define FTSP_BEACON_BUFFER_SIZE (64)
+#define FTSP_MAX_SYNC_POINT_AGE (20 * 60 * 1000 * 1000) // 20 min in us
 
 // threads
 static void *beacon_thread(void *arg);
@@ -78,9 +79,9 @@ char ftsp_beacon_buffer[FTSP_BEACON_BUFFER_SIZE] =
 { 0 };
 
 static int8_t i, free_item, oldest_item;
-static uint64_t local_average, age, oldest_time;
+static uint64_t local_average, age;
 static uint8_t num_entries, table_entries, heart_beats, num_errors, seq_num;
-static int64_t offset_average, time_error, a, b;
+static int64_t offset_average, a, b;
 static int64_t local_sum, offset_sum;
 static int64_t offset;
 static float skew;
@@ -370,29 +371,27 @@ static void linear_regression(void)
             num_entries, ftsp_is_synced());
 }
 
+//XXX: This function not only adds an entry but also removes old entries.
+// This is the wrong place and the wrong time.
 static void add_new_entry(ftsp_beacon_t *beacon, gtimer_timeval_t *toa)
 {
-    DEBUG("calculate_conversion");
     free_item = -1;
-    oldest_item = 0;
-    age = 0;
-    oldest_time = 0;
+    uint8_t oldest_item;
+    uint64_t oldest_time = UINT64_MAX;
+    uint64_t limit_age = toa->local - FTSP_MAX_SYNC_POINT_AGE;
+    // surround errors at the beginning
+    if (toa->local < FTSP_MAX_SYNC_POINT_AGE)
+      limit_age = 0;
 
     table_entries = 0;
 
-    time_error = (int64_t) (beacon->local + beacon->offset - toa->global);
+    int64_t time_error = (int64_t) (beacon->global - toa->global);
     if (ftsp_is_synced() == FTSP_OK)
     {
-        /*
-         #ifdef DEBUG_ENABLED
-         char buf[60];
-         DEBUG("FTSP synced, error %s\n", l2s(time_error, X64LL_SIGNED, buf));
-         #endif
-         */
         if ((time_error > FTSP_ENTRY_THROWOUT_LIMIT)
                 || (-time_error > FTSP_ENTRY_THROWOUT_LIMIT))
         {
-            DEBUG("(big)\n");
+            DEBUG("(big error, new root?)\n");
             if (++num_errors > 3)
             {
                 puts("FTSP: num_errors > 3 => clear_table()\n");
@@ -401,7 +400,6 @@ static void add_new_entry(ftsp_beacon_t *beacon, gtimer_timeval_t *toa)
         }
         else
         {
-            DEBUG("(small)\n");
             num_errors = 0;
         }
     }
@@ -410,11 +408,11 @@ static void add_new_entry(ftsp_beacon_t *beacon, gtimer_timeval_t *toa)
         DEBUG("FTSP not synced\n");
     }
 
+
+
     for (i = 0; i < FTSP_MAX_ENTRIES; ++i)
     {
-        age = toa->local - table[i].local_time;
-
-        if (age >= 0x7FFFFFFFL)
+        if (table[i].local < limit_age)
             table[i].state = FTSP_ENTRY_EMPTY;
 
         if (table[i].state == FTSP_ENTRY_EMPTY)
@@ -422,9 +420,9 @@ static void add_new_entry(ftsp_beacon_t *beacon, gtimer_timeval_t *toa)
         else
             ++table_entries;
 
-        if (age >= oldest_time)
+        if (oldest_time > table[i].local)
         {
-            oldest_time = age;
+            oldest_time = table[i].local;
             oldest_item = i;
         }
     }
@@ -435,8 +433,8 @@ static void add_new_entry(ftsp_beacon_t *beacon, gtimer_timeval_t *toa)
         ++table_entries;
 
     table[free_item].state = FTSP_ENTRY_FULL;
-    table[free_item].local_time = toa->local;
-    table[free_item].time_offset = beacon->local + beacon->offset - toa->local;
+    table[free_item].local = toa->local;
+    table[free_item].global = beacon->global;
 }
 
 static void clear_table(void)
