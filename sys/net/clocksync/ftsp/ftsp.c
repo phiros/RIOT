@@ -84,7 +84,7 @@ static uint64_t local_average;
 static uint8_t table_entries, heart_beats, num_errors, seq_num;
 static int64_t offset_average;
 static int64_t offset;
-static float skew;
+static float rate;
 static table_item table[FTSP_MAX_ENTRIES];
 
 static void clear_table(void);
@@ -103,7 +103,7 @@ void ftsp_init(void)
 {
     mutex_init(&ftsp_mutex);
 
-    skew = 0.0;
+    rate = 0.0;
     local_average = 0;
     offset_average = 0;
     clear_table();
@@ -252,7 +252,7 @@ void ftsp_mac_read(uint8_t *frame_payload, uint16_t src, gtimer_timeval_t *toa)
     linear_regression();
 
     gtimer_sync_set_global_offset(offset);
-    gtimer_sync_set_relative_rate(skew);
+    gtimer_sync_set_relative_rate(rate);
 
     mutex_unlock(&ftsp_mutex);
 }
@@ -285,7 +285,7 @@ void ftsp_resume(void)
     {
         root_id = 0xFFFF;
     }
-    skew = 0.0;
+    rate = 0.0;
     local_average = 0;
     offset_average = 0;
     clear_table();
@@ -348,11 +348,11 @@ static void linear_regression(void)
         }
     }
 
-    skew = (covariance - (sum_global * sum_local) / table_entries);
-    skew /= (sum_global_squared - ((sum_global * sum_local) / table_entries));
-    skew -= 1;
+    rate = (covariance - (sum_global * sum_local) / table_entries);
+    rate /= (sum_global_squared - ((sum_global * sum_local) / table_entries));
+    rate -= 1;
 
-    offset = (sum_local - skew * sum_global) / table_entries;
+    offset = (sum_local - rate * sum_global) / table_entries;
 
     DEBUG("FTSP conversion calculated: num_entries=%u, is_synced=%u\n",
             num_entries, ftsp_is_synced());
