@@ -17,6 +17,7 @@ class ClocksyncEvalLogAnalyzer():
         self.triggerDict = dict()
         self.heartbeatDict = dict()
         self.localErrorMaxAvg = dict()
+        self.localError = dict()
         self.logdir = logdir
         self.minBackboneTime = sys.maxint
         self.maxBackboneTime = 0
@@ -49,9 +50,12 @@ class ClocksyncEvalLogAnalyzer():
                     self.fillHeartbeatDict(fileName)
                     self.fillHeartBeatByIdDict(fileName)
 
-        # Fix offset:
+        # Fix offset and find the count of sended trigger per node:
+        self.sendedTrigger = 0
         for rec in self.triggerDict:
             for sender in self.triggerDict[rec]:
+              if len(self.triggerDict[rec][sender]) > self.sendedTrigger:
+                  self.sendedTrigger = len(self.triggerDict[rec][sender])
               for trigger in self.triggerDict[rec][sender]:
                   server, glob, local = self.triggerDict[rec][sender][trigger]
                   self.triggerDict[rec][sender][trigger] = server - self.firstTime, glob, local
@@ -285,27 +289,28 @@ class ClocksyncEvalLogAnalyzer():
                 continue
 
             commonTriggers = set(self.triggerDict[recv1].keys()).intersection(set(self.triggerDict[recv2].keys()))
-            if not commonTriggers:
-                print "Counldn't find a common trigger for " + recv1 + " and " + recv2
-                continue
 
-            # take one arbitrary common trigger, this isn't the best choice
-            #TODO: Find the trigger with the maximum of shared trigger events
-            # or create a (clever) merge of all trigger
-            commonTrigger = commonTriggers.pop()
+            # self.localError[recv1, recv2] = dict()
 
-            # Dictionaries: Trigger ID -> Event
-            events1 = self.triggerDict[recv1][commonTrigger]
-            events2 = self.triggerDict[recv2][commonTrigger]
+            trigger = 0
+            for commonTrigger in commonTriggers:
+                # Dictionaries: Trigger ID -> Event
+                events1 = self.triggerDict[recv1][commonTrigger]
+                events2 = self.triggerDict[recv2][commonTrigger]
 
-            for id in set(events1.iterkeys()).intersection(set(events2.iterkeys())):
-                server1, global1, local1 = events1[id]
-                server2, global2, local2 = events2[id]
-                meanServer = (server1 + server2) / 2
-                timeBucket = math.floor(meanServer/bucketsize) * bucketsize
-                error = abs(global1 - global2)
-                if self.localErrorMaxAvg.get(timeBucket, -1000) < error:
-                    self.localErrorMaxAvg[timeBucket] = error
+                for id in set(events1.iterkeys()).intersection(set(events2.iterkeys())):
+                    trigger += 1
+                    server1, global1, local1 = events1[id]
+                    server2, global2, local2 = events2[id]
+                    meanServer = (server1 + server2) / 2
+                    timeBucket = math.floor(meanServer/bucketsize) * bucketsize
+                    error = abs(global1 - global2)
+                    if self.localErrorMaxAvg.get(timeBucket, -1000) < error:
+                        self.localErrorMaxAvg[timeBucket] = error
+                    self.localError[meanServer] = error
+
+            if trigger < (self.sendedTrigger / 2):
+                print recv1 + ", " + recv2 + ": common trigger only covers " + str(trigger * 100 / self.sendedTrigger) + "%"
 
     def avgLocalErrorToCalibration(self):
         bucketSize = 10 # 10 us buckets

@@ -6,28 +6,36 @@ import time, calendar, collections
 
 from loganalyzer import ClocksyncEvalLogAnalyzer
 
-loga = None
+colors = ["blue", "green", "red", "orange", "black"]
 
 def print_help():
   supportedProtocols = ["gtsp", "ftsp", "pulsesync"]
-  print("plotSyncError.py [--sync-only -p <protocol>] [-G|-L] <path-to-log-files>")
-  print("-G: global error")
-  print("-L: local error")
-  print("-y: y max")
-  print("-s: show only sync phase")
+  print "plotSyncError.py [-s -p <protocol>] [-G|-L] [-o output]<path-to-log-files>"
+  print "-a: shows all measure points, not only the upper bound"
+  print "-G: global error"
+  print "-L: local error"
+  print "-o file:"
+  print "   doesn't open a window, but save the plot as image"
+  print "   supported formats: jpg, pdf"
+  print "-p protocol:"
+  print "   set the protocol for the logs, only needed by -s"
+  print "-s: show only sync phase"
+  print "-y: y max"
   print("supported protocols: ")
   for p in supportedProtocols:
     print("\t" + p)
 
 def main(argv):
+  loga = None
   protocol = None
   globalError = False
   yrange = 0
   synconly = False
   out = False
+  showAllPoints = False
 
   try:
-    opts, logdirs = getopt.getopt(argv,"o:hp:GLy:s",["output=", "protocol=", "Global", "Local", "y-range=", "sync-only"])
+    opts, logdirs = getopt.getopt(argv,"o:hp:GLy:sa",["output=", "protocol=", "Global", "Local", "y-range=", "sync-only", "all-points"])
   except getopt.GetoptError:
     print_help()
     sys.exit(2)
@@ -47,6 +55,8 @@ def main(argv):
       synconly = True
     elif opt in ("-o", "--output"):
       out = arg
+    elif opt in ("-a", "--all-points"):
+      showAllPoints = True
 
   if not logdirs:
     print("No log folders")
@@ -60,7 +70,11 @@ def main(argv):
       sys.exit(1)
     logas = [ClocksyncEvalLogAnalyzer(logdir, ".*" + protocol +  " on.*", ".*" + protocol +  " off.*") for logdir in logdirs]
   else:
-      logas = [ClocksyncEvalLogAnalyzer(logdir, ".*RIOT.*", "$a") for logdir in logdirs]
+    logas = [ClocksyncEvalLogAnalyzer(logdir, ".*RIOT.*", "$a") for logdir in logdirs]
+
+  if len(logas) > len(colors):
+    print "Warning: more log folders than colors defined"
+    print "         plotting some graphs with same color"
 
   if globalError:
     pylab.title("global sync error")
@@ -72,12 +86,17 @@ def main(argv):
       # pylab.errorbar(xvals, yvals, errors)
   else:
     pylab.title("local sync error")
+    colorIndex = 0
     for loga in logas:
+      color = colors[colorIndex % len(colors)]
+      colorIndex += 1
+
       xvals = loga.localErrorMaxAvg.keys()
       yvals = loga.localErrorMaxAvg.values()
-      pylab.plot(xvals, yvals, label = loga.name)
-      # errors = [0 for i in xvals]
-      # pylab.errorbar(xvals, yvals, errors)
+      pylab.plot(xvals, yvals, label = loga.name, color = color)
+
+      if showAllPoints:
+        pylab.plot(loga.localError.keys(), loga.localError.values(), "x", color = color)
 
   if yrange>0:
     pylab.ylim([0,yrange])
@@ -92,6 +111,9 @@ def main(argv):
     pylab.savefig(out)
   else:
     pylab.show()
+
+def identitiy(x):
+  return x;
 
 def global_diff_wrapper(loga, xvals):
   diffs = []
