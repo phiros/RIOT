@@ -5,6 +5,24 @@ import os, re, math, sys, pylab
 import time, calendar, collections
 import numpy as np
 
+def basic_linear_regression(loc, glob):
+    # Basic computations to save a little time.
+    length = len(loc)
+    sum_loc = sum(loc)
+    sum_glob = sum(glob)
+    print sum_loc, sum_glob
+    sum_loc_squared = sum(map(lambda a: a * a, loc))
+    print sum_loc_squared
+    covariance = sum([loc[i] * glob[i] for i in range(length)])
+    print covariance
+
+    # Magic formulae!  
+    skew = (covariance * length - (sum_loc * sum_glob)) 
+    skew /= (sum_loc_squared * length - (sum_loc ** 2))
+    offset = (sum_glob - skew * sum_loc) / length
+
+    return skew, offset
+
 class ClocksyncEvalLogAnalyzer():
     def __init__(self, logdir, beginRe = ".*", endRe = ".*"):
         self.name = logdir
@@ -15,6 +33,7 @@ class ClocksyncEvalLogAnalyzer():
         self.maxAdj = 0.0
         # Diconary: ReceivingNode -> SendingNode (Int) -> TriggerId (Int) -> (Server Time, Global Time, Local Time)
         self.triggerDict = dict()
+        self.backVsGlobal = dict()
         self.heartbeatDict = dict()
         self.localErrorMaxAvg = dict()
         self.localError = dict()
@@ -59,6 +78,14 @@ class ClocksyncEvalLogAnalyzer():
               for trigger in self.triggerDict[rec][sender]:
                   server, glob, local = self.triggerDict[rec][sender][trigger]
                   self.triggerDict[rec][sender][trigger] = server - self.firstTime, glob, local
+
+        skew, offset = basic_linear_regression(self.backVsGlobal.keys(), self.backVsGlobal.values())
+        newBackVsGlobal = dict()
+
+        for server, glob in self.backVsGlobal.items():
+            # glob += diffGlobal * (server - minimalServer) / diffServer
+            newBackVsGlobal[server] = glob - server * skew
+        self.backVsGlobal = newBackVsGlobal
 
         self.triggerToMaxLocalError()
         self.heartBeatToGlobalError()
@@ -137,6 +164,7 @@ class ClocksyncEvalLogAnalyzer():
                         self.heartbeatDict[timeBucket].append(tupple)
                     else:
                         self.heartbeatDict[timeBucket] = [tupple]
+                    self.backVsGlobal[serverTimeStamp] = globalTime
 
     def fillHeartBeatByIdDict(self, fileName):
         bucketsize = self.heartBeatBucketSize # 10 seconds buckets

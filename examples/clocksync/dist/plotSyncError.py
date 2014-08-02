@@ -79,11 +79,10 @@ def main(argv):
   if globalError:
     pylab.title("global sync error")
     for loga in logas:
-      xvals = pylab.linspace(loga.minBackboneTime, loga.maxBackboneTime, 100)
-      yvals = global_diff_wrapper(loga, xvals)
-      pylab.plot(xvals, yvals, label = loga.name)
-      # errors = global_diff_wrapper(loga, xvals)
-      # pylab.errorbar(xvals, yvals, errors)
+      # xvals = pylab.linspace(loga.minBackboneTime, loga.maxBackboneTime, 100)
+      # yvals = global_diff_wrapper(loga, xvals)
+      # pylab.plot(xvals, yvals, label = loga.name)
+      pylab.plot(loga.backVsGlobal.keys(), loga.backVsGlobal.values(), "x", label = loga.name)
   else:
     pylab.title("local sync error")
     colorIndex = 0
