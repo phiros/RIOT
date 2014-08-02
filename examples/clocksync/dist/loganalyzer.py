@@ -5,16 +5,38 @@ import os, re, math, sys, pylab
 import time, calendar, collections
 import numpy as np
 
+def basic_linear_regression(loc, glob):
+    # Basic computations to save a little time.
+    length = len(loc)
+    sum_loc = sum(loc)
+    sum_glob = sum(glob)
+    print sum_loc, sum_glob
+    sum_loc_squared = sum(map(lambda a: a * a, loc))
+    print sum_loc_squared
+    covariance = sum([loc[i] * glob[i] for i in range(length)])
+    print covariance
+
+    # Magic formulae!  
+    skew = (covariance * length - (sum_loc * sum_glob)) 
+    skew /= (sum_loc_squared * length - (sum_loc ** 2))
+    offset = (sum_glob - skew * sum_loc) / length
+
+    return skew, offset
+
 class ClocksyncEvalLogAnalyzer():
-    def __init__(self, logdir = "", beginRe = ".*", endRe = ".*"):
+    def __init__(self, logdir, beginRe = ".*", endRe = ".*"):
+        self.name = logdir
+        self.firstTime = False
         # Diconary: (sendingNode, receivingNode) -> Rate of transfered signals
         self.adjDict = dict()
         self.heartBeatByIdDict = dict()
         self.maxAdj = 0.0
         # Diconary: ReceivingNode -> SendingNode (Int) -> TriggerId (Int) -> (Server Time, Global Time, Local Time)
         self.triggerDict = dict()
+        self.backVsGlobal = dict()
         self.heartbeatDict = dict()
         self.localErrorMaxAvg = dict()
+        self.localError = dict()
         self.logdir = logdir
         self.minBackboneTime = sys.maxint
         self.maxBackboneTime = 0
@@ -37,7 +59,7 @@ class ClocksyncEvalLogAnalyzer():
                 hosts[id] = line.strip()
                 id += 1
         return hosts
-        
+
     def analyze(self):
         for root, dirs, files in os.walk(self.logdir):
             for file in files:
@@ -46,6 +68,25 @@ class ClocksyncEvalLogAnalyzer():
                     self.analyzeTriggerEvents(fileName)
                     self.fillHeartbeatDict(fileName)
                     self.fillHeartBeatByIdDict(fileName)
+
+        # Fix offset and find the count of sended trigger per node:
+        self.sendedTrigger = 0
+        for rec in self.triggerDict:
+            for sender in self.triggerDict[rec]:
+              if len(self.triggerDict[rec][sender]) > self.sendedTrigger:
+                  self.sendedTrigger = len(self.triggerDict[rec][sender])
+              for trigger in self.triggerDict[rec][sender]:
+                  server, glob, local = self.triggerDict[rec][sender][trigger]
+                  self.triggerDict[rec][sender][trigger] = server - self.firstTime, glob, local
+
+        skew, offset = basic_linear_regression(self.backVsGlobal.keys(), self.backVsGlobal.values())
+        newBackVsGlobal = dict()
+
+        for server, glob in self.backVsGlobal.items():
+            # glob += diffGlobal * (server - minimalServer) / diffServer
+            newBackVsGlobal[server] = glob - server * skew
+        self.backVsGlobal = newBackVsGlobal
+
         self.triggerToMaxLocalError()
         self.heartBeatToGlobalError()
         self.globalServerDiffToFunctionFit()
@@ -53,7 +94,7 @@ class ClocksyncEvalLogAnalyzer():
         self.localErrorMaxAvg = od
         self.scaleGlobalErrorTime()
         od = collections.OrderedDict(sorted(self.maxGlobalError.items()))
-        self.maxGlobalError = od        
+        self.maxGlobalError = od
         od = collections.OrderedDict(sorted(self.heartbeatDict.items()))
         self.heartbeatDict = od
 
@@ -62,18 +103,18 @@ class ClocksyncEvalLogAnalyzer():
             self.adjDict[relation] /= self.maxAdj
 
     def getCalibrationOffset(self):
-        calCount = self.avgLocalErrorToCalibration()   
-        od = collections.OrderedDict(sorted(calCount.items())) 
-        calCount = od  
-        calOffset = self.calibrationOffset() 
-        return calOffset      
+        calCount = self.avgLocalErrorToCalibration()
+        od = collections.OrderedDict(sorted(calCount.items()))
+        calCount = od
+        calOffset = self.calibrationOffset()
+        return calOffset
 
     def dateTimeToTimeStamp(self, serverDate, serverTime):
         tempString = serverDate + " " + serverTime
         t = tempString.split(",")
         dateTimePart = t[0]
         millisecondPart = float("0." + t[1])
-        
+
         timetuple = time.strptime(tempString.split(",")[0], "%Y-%m-%d %H:%M:%S")
         unixtime = float(calendar.timegm(timetuple))
         return (unixtime + millisecondPart)
@@ -81,18 +122,13 @@ class ClocksyncEvalLogAnalyzer():
     def fillHeartbeatDict(self, fileName):
         bucketsize = self.heartBeatBucketSize # 10 seconds buckets
         logpats = r'(\S+)\s+(\S+).*\#eh, a: (\S+), gl: (\S+), gg: (\S+),.*'
-        hostpats = r'.*/(\S+)\.log'
         endPats = r'' + self.endRe
         beginPats = r'' + self.beginRe
-        logpat = re.compile(logpats)        
-        hostpat = re.compile(hostpats)        
-        beginpat = re.compile(beginPats)        
+        logpat = re.compile(logpats)
+        beginpat = re.compile(beginPats)
         endpat = re.compile(endPats)
         continueToRead = False
         with open(fileName) as f:
-            hostMatch = hostpat.match(fileName)
-            if hostMatch:
-                hostName = hostMatch.groups()[0]
             for line in f:
                 if endpat.match(line):
                     break
@@ -100,9 +136,9 @@ class ClocksyncEvalLogAnalyzer():
                     if beginpat.match(line):
                         continueToRead = True
                     continue
-                
+
                 match = logpat.match(line)
-                if(match): 
+                if(match):
                     tuple = match.groups()
                     serverDate = tuple[0]
                     serverTime = tuple[1]
@@ -111,39 +147,37 @@ class ClocksyncEvalLogAnalyzer():
                     localTime = int(tuple[3])
                     globalTime = int(tuple[4])
                     globalServerDiff = serverTimeStamp - globalTime
-                    
+
                     if serverTimeStamp > self.maxBackboneTime:
                         self.maxBackboneTime = serverTimeStamp
                     if serverTimeStamp < self.minBackboneTime:
                         self.minBackboneTime = serverTimeStamp
-                    
+
                     if globalServerDiff < self.globalMinDiff:
                         self.globalMinDiff = globalServerDiff
-                    timeBucket = int(math.floor(serverTimeStamp/bucketsize)*bucketsize)                   
+                    timeBucket = int(math.floor(serverTimeStamp/bucketsize)*bucketsize)
                     if timeBucket > self.maxServerTime:
                         self.maxServerTime = timeBucket
-                        
+
                     tupple = (serverTimeStamp, globalServerDiff, sourceId, localTime, globalTime)
                     if self.heartbeatDict.has_key(timeBucket):
-                        self.heartbeatDict[timeBucket].append(tupple)                                       
+                        self.heartbeatDict[timeBucket].append(tupple)
                     else:
-                        self.heartbeatDict[timeBucket] = [tupple]    
-                        
+                        self.heartbeatDict[timeBucket] = [tupple]
+                    self.backVsGlobal[serverTimeStamp] = globalTime
+
     def fillHeartBeatByIdDict(self, fileName):
         bucketsize = self.heartBeatBucketSize # 10 seconds buckets
         logpats = r'(\S+)\s+(\S+).*\#eh, a: (\S+), gl: (\S+), gg: (\S+),.*'
         hostpats = r'.*/(\S+)\.log'
         endPats = r'' + self.endRe
         beginPats = r'' + self.beginRe
-        logpat = re.compile(logpats)        
-        hostpat = re.compile(hostpats)        
-        beginpat = re.compile(beginPats)        
+        logpat = re.compile(logpats)
+        hostpat = re.compile(hostpats)
+        beginpat = re.compile(beginPats)
         endpat = re.compile(endPats)
         continueToRead = False
         with open(fileName) as f:
-            hostMatch = hostpat.match(fileName)
-            if hostMatch:
-                hostName = hostMatch.groups()[0]
             for line in f:
                 if endpat.match(line):
                     break
@@ -151,9 +185,9 @@ class ClocksyncEvalLogAnalyzer():
                     if beginpat.match(line):
                         continueToRead = True
                     continue
-                
+
                 match = logpat.match(line)
-                if(match): 
+                if(match):
                     tuple = match.groups()
                     serverDate = tuple[0]
                     serverTime = tuple[1]
@@ -161,13 +195,13 @@ class ClocksyncEvalLogAnalyzer():
                     sourceId = int(tuple[2])
                     localTime = int(tuple[3])
                     globalTime = int(tuple[4])
-                    globalServerDiff = serverTimeStamp - globalTime 
+                    globalServerDiff = serverTimeStamp - globalTime
                     tupple = (serverTimeStamp, globalServerDiff, localTime, globalTime)
                     if self.heartBeatByIdDict.has_key(sourceId):
-                        self.heartBeatByIdDict[sourceId].append(tupple)                                       
+                        self.heartBeatByIdDict[sourceId].append(tupple)
                     else:
-                        self.heartBeatByIdDict[sourceId] = [tupple]   
-      
+                        self.heartBeatByIdDict[sourceId] = [tupple]
+
     def globalServerDiffToFunctionFit(self):
         for id, tuppleList in self.heartBeatByIdDict.items():
             xvals = []
@@ -178,9 +212,9 @@ class ClocksyncEvalLogAnalyzer():
                 xvals.append(serverTime)
                 yvals.append(globalServerDiff)
             fit, residual, _, _, _ =  np.polyfit(xvals, yvals, 1, full = True) # assume linear relationship
-            self.globalErrorFitFunctionsById[id] = (np.poly1d(fit), residual)               
-            
-                        
+            self.globalErrorFitFunctionsById[id] = (np.poly1d(fit), residual)
+
+
     def heartBeatToGlobalError(self):
         self.globalMinBucket = sys.maxint
         self.localMaxBucket = 0
@@ -189,7 +223,7 @@ class ClocksyncEvalLogAnalyzer():
                 self.globalMinBucket = bucket
             if bucket > self.localMaxBucket:
                 self.localMaxBucket = bucket
-                
+
             minDiff = sys.maxint
             maxDiff = 0
             for tupple in tuppleList:
@@ -199,15 +233,15 @@ class ClocksyncEvalLogAnalyzer():
                 if globalServerDiff > maxDiff:
                     maxDiff = globalServerDiff
             self.maxGlobalError[bucket] = maxDiff - minDiff
-      
-        
+
+
     def scaleGlobalErrorTime(self):
         newGlobalError = dict()
         for time in self.maxGlobalError.keys():
-            timeInSeconds = int((time-self.globalMinBucket)/(1000*1000))            
+            timeInSeconds = int((time-self.globalMinBucket)/(1000*1000))
             newGlobalError[timeInSeconds] =  self.maxGlobalError[time]
-        self.maxGlobalError = newGlobalError      
-                   
+        self.maxGlobalError = newGlobalError
+
     # Analyze all trigger events in fileName and fills
     # the triggerDict and the adjDict with the results.
     def analyzeTriggerEvents(self, fileName):
@@ -215,16 +249,17 @@ class ClocksyncEvalLogAnalyzer():
         hostpats = r'.*/(\S+)\.log'
         endPats = r'' + self.endRe
         beginPats = r'' + self.beginRe
-        logpat = re.compile(logpats)        
-        hostpat = re.compile(hostpats)        
-        beginpat = re.compile(beginPats)        
+        logpat = re.compile(logpats)
+        hostpat = re.compile(hostpats)
+        beginpat = re.compile(beginPats)
         endpat = re.compile(endPats)
-        
+
+        hostMatch = hostpat.match(fileName)
+        if hostMatch:
+            hostName = hostMatch.groups()[0]
+
         continueToRead = False
         with open(fileName) as file:
-            hostMatch = hostpat.match(fileName)
-            if hostMatch:
-                hostName = hostMatch.groups()[0]
             for line in file:
                 if endpat.match(line):
                     break
@@ -232,21 +267,28 @@ class ClocksyncEvalLogAnalyzer():
                     if beginpat.match(line):
                         continueToRead = True
                     continue
-                
+
                 match = logpat.match(line)
-                if(match):                    
+                if(match):
                     tuple = match.groups()
                     serverDate = tuple[0]
                     serverTime = tuple[1]
                     serverTimeStamp = self.dateTimeToTimeStamp(serverDate, serverTime)
                     beaconSender = int(tuple[2])
+
+                    #TODO: Remove this evil filter
+                    if beaconSender > 200:
+                        continue
                     beaconCounter = int(tuple[3])
                     localTime = int(tuple[4])
                     globalTime = int(tuple[5])
+                    if not self.firstTime or self.firstTime > serverTimeStamp:
+                        self.firstTime = serverTimeStamp
+
                     if not self.triggerDict.has_key(hostName):
                         self.triggerDict[hostName] = dict()
                     if not self.triggerDict[hostName].has_key(beaconSender):
-                        self.triggerDict[hostName][beaconSender] = dict()                          
+                        self.triggerDict[hostName][beaconSender] = dict()
                     self.triggerDict[hostName][beaconSender][beaconCounter] = serverTimeStamp, globalTime, localTime
 
                     # Updating adj dict
@@ -266,33 +308,42 @@ class ClocksyncEvalLogAnalyzer():
             # ignore all nodes with a weaker connection than 80%
             if self.adjDict[recv1, recv2] < 0.8:
                 continue
-            commonTriggers = set(self.triggerDict[recv1].iterkeys()).intersection(set(self.triggerDict[recv2].iterkeys()))
-            if not commonTriggers:
-                print "Counldn't find a common trigger for " + recv1 + " and " + recv2
+            if not self.triggerDict.has_key(recv1):
+                print "No trigger for " + recv1 + " found"
                 continue
 
-            # take one arbitrary common trigger, this isn't the best choice
-            #TODO: Find the trigger with the maximum of shared trigger events
-            # or create a (clever) merge of all trigger
-            commonTrigger = commonTriggers.pop()
+            if not self.triggerDict.has_key(recv2):
+                print "No trigger for " + recv2 + " found"
+                continue
 
-            # Dictionaries: Trigger ID -> Event 
-            events1 = self.triggerDict[recv1][commonTrigger]
-            events2 = self.triggerDict[recv2][commonTrigger]
+            commonTriggers = set(self.triggerDict[recv1].keys()).intersection(set(self.triggerDict[recv2].keys()))
 
-            for id in set(events1.iterkeys()).intersection(set(events2.iterkeys())):
-                server1, global1, local1 = events1[id]
-                server2, global2, local2 = events2[id]
-                meanServer = (server1 + server2) / 2
-                timeBucket = math.floor(meanServer/bucketsize) * bucketsize
-                error = abs(global1 - global2)
-                if self.localErrorMaxAvg.get(timeBucket, -1000) < error:
-                    self.localErrorMaxAvg[timeBucket] = error
- 
+            # self.localError[recv1, recv2] = dict()
+
+            trigger = 0
+            for commonTrigger in commonTriggers:
+                # Dictionaries: Trigger ID -> Event
+                events1 = self.triggerDict[recv1][commonTrigger]
+                events2 = self.triggerDict[recv2][commonTrigger]
+
+                for id in set(events1.iterkeys()).intersection(set(events2.iterkeys())):
+                    trigger += 1
+                    server1, global1, local1 = events1[id]
+                    server2, global2, local2 = events2[id]
+                    meanServer = (server1 + server2) / 2
+                    timeBucket = math.floor(meanServer/bucketsize) * bucketsize
+                    error = abs(global1 - global2)
+                    if self.localErrorMaxAvg.get(timeBucket, -1000) < error:
+                        self.localErrorMaxAvg[timeBucket] = error
+                    self.localError[meanServer] = error
+
+            if trigger < (self.sendedTrigger / 2):
+                print recv1 + ", " + recv2 + ": common trigger only covers " + str(trigger * 100 / self.sendedTrigger) + "%"
+
     def avgLocalErrorToCalibration(self):
         bucketSize = 10 # 10 us buckets
         self.offsetCount = dict()
-        maxBucket = 0    
+        maxBucket = 0
         for bucket, error in self.localErrorMaxAvg.items():
             timeBucket = error - (error % bucketSize)
             if timeBucket>maxBucket:
@@ -304,9 +355,9 @@ class ClocksyncEvalLogAnalyzer():
         for bucket in range(0, maxBucket + bucketSize, bucketSize):
             if not self.offsetCount.has_key(bucket):
                 self.offsetCount[bucket] = 0
-        return self.offsetCount 
+        return self.offsetCount
 
-    def calibrationOffset(self): 
+    def calibrationOffset(self):
         returnBucket = 0
         maxCount = 0
         for bucket, count in self.offsetCount.items():
