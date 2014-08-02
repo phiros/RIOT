@@ -94,13 +94,14 @@ static uint16_t node_id = 0;
 static uint8_t table_entries, heart_beats, num_errors, seq_num;
 static int64_t offset;
 static float rate;
-static table_item table[FTSP_MAX_ENTRIES];
-mutex_t ftsp_mutex;
+static ftsp_table_item_t table[FTSP_MAX_ENTRIES];
 
-char ftsp_beacon_stack[FTSP_BEACON_STACK_SIZE];
-char ftsp_cyclic_stack[FTSP_CYCLIC_STACK_SIZE];
-char ftsp_beacon_buffer[FTSP_BEACON_BUFFER_SIZE] =
-{ 0 };
+static char ftsp_beacon_stack[FTSP_BEACON_STACK_SIZE];
+static char ftsp_cyclic_stack[FTSP_CYCLIC_STACK_SIZE];
+static char ftsp_beacon_buffer[FTSP_BEACON_BUFFER_SIZE] =
+{ 0 }
+
+mutex_t ftsp_mutex;
 
 
 void ftsp_init(void)
@@ -257,6 +258,7 @@ void ftsp_pause(void)
 
 void ftsp_resume(void)
 {
+    DEBUG("ftsp: resume");
     node_id = get_transceiver_addr();
     if (node_id == FTSP_PREFERRED_ROOT)
     {
@@ -279,13 +281,10 @@ void ftsp_resume(void)
         PRIORITY_MAIN - 2,
         CREATE_STACKTEST, cyclic_driver_thread, NULL, "ftsp_cyclic_driver");
     }
-
-    DEBUG("FTSP enabled");
 }
 
 void ftsp_driver_timestamp(uint8_t *ieee802154_frame, uint8_t frame_length)
 {
-
     if (ieee802154_frame[0] == FTSP_PROTOCOL_DISPATCH)
     {
         gtimer_timeval_t now;
@@ -297,7 +296,6 @@ void ftsp_driver_timestamp(uint8_t *ieee802154_frame, uint8_t frame_length)
         beacon->global = now.global + transmission_delay;
         memcpy(ieee802154_frame + hdrlen, beacon, sizeof(ftsp_beacon_t));
     }
-
 }
 
 int ftsp_is_synced(void)

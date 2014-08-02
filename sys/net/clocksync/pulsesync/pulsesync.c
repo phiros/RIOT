@@ -25,20 +25,19 @@
 #include "mutex.h"
 #include "ieee802154_frame.h"
 #include "sixlowpan/mac.h"
-#include "sixlowpan/dispatch_values.h"
 #include "random.h"
 #include "transceiver.h"
 
 #include "clocksync/pulsesync.h"
+#include "sixlowpan/dispatch_values.h"
 #include "gtimer.h"
 
-//#include "x64toa.h"
 
 #ifdef MODULE_CC110X_NG
-#define PULSESYNC_CALIBRATION_OFFSET ((uint32_t) 0)
+#define PULSESYNC_CALIBRATION_OFFSET ((uint32_t) 2300)
 
 #elif MODULE_NATIVENET
-#define PULSESYNC_CALIBRATION_OFFSET ((uint32_t) 0)
+#define PULSESYNC_CALIBRATION_OFFSET ((uint32_t) 1500)
 
 #else
 #warning "Transceiver not supported by PulseSync!"
@@ -54,47 +53,56 @@
 // Protocol parameters
 #define PULSESYNC_PREFERRED_ROOT (1) // node with id==1 will become root
 #define PULSESYNC_BEACON_INTERVAL (30 * 1000 * 1000) // in us
-
-// In order to reduce the likelihood of a package collision during the
+#define PULSESYNC_MAX_SYNC_POINT_AGE (20 * 60 * 1000 * 1000) // max age for reg. table entry
+#define PULSESYNC_RATE_CALC_THRESHOLD (3) // at least 3 entries needed before rate is calculated
+#define PULSESYNC_MAX_ENTRIES (8) // number of entries in the regression table
+#define PULSESYNC_ENTRY_VALID_LIMIT (4) // number of entries to become synchronized
+#define PULSESYNC_ENTRY_SEND_LIMIT (3) // number of entries to send sync messages
+#define PULSESYNC_ROOT_TIMEOUT (3) // time to declare itself the root if no msg was received (in sync periods)
+#define PULSESYNC_IGNORE_ROOT_MSG (4) // after becoming the root ignore other roots messages (in send period)
+#define PULSESYNC_ENTRY_THROWOUT_LIMIT (300) // if time sync error is bigger than this clear the table
+// In order to reduce the likelihood of a packet collision during the
 // propagation of a beacon every node has to wait a random time before
 // sending the beacon.
 #define PULSESYNC_BEACON_PROPAGATION_DELAY (10*1000)
 
-#define PULSESYNC_BEACON_STACK_SIZE (KERNEL_CONF_STACKSIZE_PRINTF_FLOAT)
+// easy to read status flags
+#define PULSESYNC_OK (1)
+#define PULSESYNC_ERR (0)
+#define PULSESYNC_ENTRY_EMPTY (0)
+#define PULSESYNC_ENTRY_FULL (1)
+
+#define PULSESYNC_BEACON_STACK_SIZE (KERNEL_CONF_STACKSIZE_DEFAULT)
 #define PULSESYNC_BEACON_BUFFER_SIZE (64)
 
+// thread
 static void *beacon_thread(void *arg);
-static void send_beacon(uint64_t local, int64_t offset, float skew);
+
+static void send_beacon(void);
+static void linear_regression(void);
+static void add_new_entry(pulsesync_beacon_t *beacon, gtimer_timeval_t *toa);
+static void clear_table(void);
+static uint16_t get_transceiver_addr(void);
 
 static int beacon_thread_id = 0;
+
+// protocol state variables
 static vtimer_t beacon_timer;
 static uint32_t beacon_interval = PULSESYNC_BEACON_INTERVAL;
 static uint32_t transmission_delay = PULSESYNC_CALIBRATION_OFFSET;
-static bool protocol_pause = true;
-
+static bool pause_protocol = true;
 static uint16_t root_id = UINT16_MAX;
 static uint16_t node_id = 0;
+static uint8_t table_entries, heart_beats, num_errors, seq_num;
+static int64_t offset;
+static float rate;
+static ftsp_table_item_t table[PULSESYNC_MAX_ENTRIES];
 
 static char beacon_stack[PULSESYNC_BEACON_STACK_SIZE];
-char pulsesync_beacon_buffer[PULSESYNC_BEACON_BUFFER_SIZE] =
+static char beacon_buffer[PULSESYNC_BEACON_BUFFER_SIZE] =
 { 0 };
 
-static int8_t free_item, oldest_item;
-static uint64_t local_average, age, oldest_time;
-static uint8_t num_entries, table_entries, heart_beats, num_errors, seq_num;
-static int64_t offset_average, time_error, a, b;
-static float skew;
-static table_item table[PULSESYNC_MAX_ENTRIES];
 
-static void clear_table(void);
-static void add_new_entry(pulsesync_beacon_t *beacon, gtimer_timeval_t *toa);
-static void calculate_conversion(void);
-static uint16_t get_transceiver_addr(void);
-/*
-#ifdef DEBUG_ENABLED
-static void print_beacon(pulsesync_beacon_t *beacon);
-#endif
-*/
 
 mutex_t pulsesync_mutex;
 
@@ -102,54 +110,118 @@ void pulsesync_init(void)
 {
     mutex_init(&pulsesync_mutex);
 
-    skew = 0.0;
-    local_average = 0;
-    offset_average = 0;
+    rate = 0.0;
     clear_table();
     heart_beats = 0;
     num_errors = 0;
+    table_entries = 0;
+    offset = 0;
     beacon_thread_id = 0;
 
-    puts("PULSESYNC initialized");
+    puts("PulseSync initialized");
 }
+
+static void *beacon_thread(void *arg)
+{
+    beacon_thread_id = thread_getpid();
+    while (1)
+    {
+        if (node_id == root_id)
+        {
+            vtimer_set_wakeup(&beacon_timer, timex_from_uint64(beacon_interval),
+                    beacon_thread_id);
+        }
+        thread_sleep();
+        DEBUG("beacon_thread locking mutex\n");
+        mutex_lock(&pulsesync_mutex);
+        memset(beacon_buffer, 0, sizeof(pulsesync_beacon_t));
+        if (!pause_protocol)
+        {
+            send_beacon();
+        }
+        mutex_unlock(&pulsesync_mutex);
+        DEBUG("beacon_thread: mutex unlocked\n");
+    }
+    return NULL;
+}
+
+static void send_beacon(void)
+{
+    DEBUG("pulsesync: send_beacon\n");
+    gtimer_timeval_t now;
+    pulsesync_beacon_t *pulsesync_beacon =
+            (pulsesync_beacon_t *) beacon_buffer;
+
+    gtimer_sync_now(&now);
+    pulsesync_beacon->dispatch_marker = PULSESYNC_PROTOCOL_DISPATCH;
+    pulsesync_beacon->id = node_id;
+    // TODO: do we need to add the transmission delay to the offset?
+    pulsesync_beacon->id = node_id;
+    pulsesync_beacon->global = now.global + transmission_delay;
+    pulsesync_beacon->root = root_id;
+    pulsesync_beacon->seq_number = seq_num;
+
+    sixlowpan_mac_send_ieee802154_frame(0, NULL, 8, beacon_buffer,
+            sizeof(pulsesync_beacon_t), 1);
+    seq_num++;
+}
+
 
 void pulsesync_mac_read(uint8_t *frame_payload, uint16_t src,
         gtimer_timeval_t *toa)
 {
-    DEBUG("pulsesync_mac_read");
+    DEBUG("pulsesync_mac_read: pulsesync_mac_read");
     mutex_lock(&pulsesync_mutex);
     pulsesync_beacon_t *beacon = (pulsesync_beacon_t *) frame_payload;
 
-    if (protocol_pause || node_id == root_id || beacon->seq_number < seq_num)
+    if (pause_protocol)
     {
-        // if paused or beacon is not new -> ignore
-        mutex_unlock(&pulsesync_mutex);
+        mutex_unlock(&ftsp_mutex);
         return;
     }
 
+    if ((beacon->root < root_id)
+            && !((heart_beats < PULSESYNC_IGNORE_ROOT_MSG)
+                    && (root_id == node_id)))
+    {
+        root_id = beacon->root;
+        seq_num = beacon->seq_number;
+    }
+    else
+    {
+        if ((root_id == beacon->root)
+                && ((int8_t) (beacon->seq_number - seq_num) > 0))
+        {
+            seq_num = beacon->seq_number;
+        }
+        else
+        {
+            DEBUG(
+                    "not (beacon->root < pulsesync_root_id) [...] and not (pulsesync_root_id == beacon->root)");
+            mutex_unlock(&ftsp_mutex);
+            return;
+        }
+    }
+
+    if (root_id < node_id)
+        heart_beats = 0;
+
     add_new_entry(beacon, toa);
-    calculate_conversion();
-
-    gtimer_timeval_t now;
-    gtimer_sync_now(&now);
-    int64_t local_diff = (int64_t) table[free_item].local_time - local_average;
-
-    int64_t offset_diff = skew * local_diff;
-
-    int64_t offset_estimated = offset_average + offset_diff;
-
-    int64_t offset_now = (int64_t) now.global - (int64_t) now.local;
-
-    int64_t offset = offset_estimated - offset_now;
+    linear_regression();
+    int64_t est_global = offset + ((int64_t) toa->local) * (rate + 1);
+    int64_t offset = est_global - (int64_t) toa->global;
 
     gtimer_sync_set_global_offset(offset);
-    gtimer_sync_set_relative_rate(skew);
-    gtimer_sync_now(&now);
+    if (table_entries >= PULSESYNC_RATE_CALC_THRESHOLD)
+    {
+        gtimer_sync_set_relative_rate(rate);
+    }
 
     mutex_unlock(&pulsesync_mutex);
 
-    timex_t wait = timex_from_uint64(genrand_uint32() % PULSESYNC_BEACON_PROPAGATION_DELAY);
-    
+    timex_t wait = timex_from_uint64(
+            genrand_uint32() % PULSESYNC_BEACON_PROPAGATION_DELAY);
+
     vtimer_set_wakeup(&beacon_timer, wait, beacon_thread_id);
 }
 
@@ -165,30 +237,27 @@ void pulsesync_set_prop_time(uint32_t us)
 
 void pulsesync_pause(void)
 {
-    protocol_pause = true;
-    DEBUG("PULSESYNC disabled");
+    DEBUG("pulsesync: paused");
+    pause_protocol = true;
 }
 
 void pulsesync_resume(void)
 {
+    DEBUG("pulsesync: resume");
     node_id = get_transceiver_addr();
     if (node_id == PULSESYNC_PREFERRED_ROOT)
     {
-        //_pulsesync_root_timeout = 0;
         root_id = node_id;
     }
     else
     {
         root_id = 0xFFFF;
     }
-    skew = 0.0;
-    local_average = 0;
-    offset_average = 0;
     clear_table();
     heart_beats = 0;
     num_errors = 0;
 
-    protocol_pause = false;
+    pause_protocol = false;
 
     if (beacon_thread_id == 0)
     {
@@ -197,13 +266,10 @@ void pulsesync_resume(void)
         PRIORITY_MAIN - 2, CREATE_STACKTEST, beacon_thread, NULL,
                 "pulsesync_beacon");
     }
-
-    DEBUG("PULSESYNC enabled");
 }
 
 void pulsesync_driver_timestamp(uint8_t *ieee802154_frame, uint8_t frame_length)
 {
-
     if (ieee802154_frame[0] == PULSESYNC_PROTOCOL_DISPATCH)
     {
         gtimer_timeval_t now;
@@ -212,169 +278,93 @@ void pulsesync_driver_timestamp(uint8_t *ieee802154_frame, uint8_t frame_length)
                 frame_length);
         pulsesync_beacon_t *beacon = (pulsesync_beacon_t *) frame.payload;
         gtimer_sync_now(&now);
-        beacon->local = now.local + transmission_delay;
-        beacon->offset = (int64_t) now.global - (int64_t) now.local;
-        beacon->relative_rate = now.rate;
+        beacon->global = now.global + transmission_delay;
         memcpy(ieee802154_frame + hdrlen, beacon, sizeof(pulsesync_beacon_t));
     }
-
 }
 
 int pulsesync_is_synced(void)
 {
-    if ((num_entries >= PULSESYNC_ENTRY_VALID_LIMIT) || (root_id == node_id))
+    if ((table_entries >= PULSESYNC_ENTRY_VALID_LIMIT) || (root_id == node_id))
         return PULSESYNC_OK;
     else
         return PULSESYNC_ERR;
 }
 
-static void *beacon_thread(void *arg)
+static void linear_regression(void)
 {
-    beacon_thread_id = thread_getpid();
-    while (1)
-    {
-        if (node_id == root_id)
-        {
-            vtimer_set_wakeup(&beacon_timer, timex_from_uint64(beacon_interval), beacon_thread_id);
-        }
-        thread_sleep();
-        DEBUG("beacon_thread locking mutex\n");
-        mutex_lock(&pulsesync_mutex);
-        memset(pulsesync_beacon_buffer, 0, sizeof(pulsesync_beacon_t));
-        if (!protocol_pause)
-        {
-            gtimer_timeval_t now;
-            gtimer_sync_now(&now);
-            send_beacon(now.local, (int64_t)now.global - (int64_t)now.local, now.rate);
-        }
-        mutex_unlock(&pulsesync_mutex);
-        DEBUG("beacon_thread: mutex unlocked\n");
-    }
-    return NULL;
-}
+    DEBUG("pulsesync: linear_regression");
+    int64_t sum_local = 0, sum_global = 0, covariance = 0,
+            sum_local_squared = 0;
 
-static void send_beacon(uint64_t local, int64_t offset, float skew)
-{
-    DEBUG("_pulsesync_send_beacon\n");
-    gtimer_timeval_t now;
-    pulsesync_beacon_t *pulsesync_beacon =
-            (pulsesync_beacon_t *) pulsesync_beacon_buffer;
+    if (table_entries == 0)
+        return;
 
-    gtimer_sync_now(&now);
-    pulsesync_beacon->dispatch_marker = PULSESYNC_PROTOCOL_DISPATCH;
-    pulsesync_beacon->id = node_id;
-    // TODO: do we need to add the transmission delay to the offset?
-    pulsesync_beacon->offset = offset;
-    pulsesync_beacon->local = local + transmission_delay;
-    pulsesync_beacon->relative_rate = skew;
-    pulsesync_beacon->root = root_id;
-    pulsesync_beacon->seq_number = seq_num;
-#ifdef DEBUG_ENABLED
-    print_beacon(pulsesync_beacon);
-#endif
-    sixlowpan_mac_send_ieee802154_frame(0, NULL, 8, pulsesync_beacon_buffer,
-            sizeof(pulsesync_beacon_t), 1);
-    seq_num++;
-}
-
-static void calculate_conversion(void)
-{
-    DEBUG("calculate_conversion");
-    int8_t i;
-    for (i = 0;
-            (i < PULSESYNC_MAX_ENTRIES)
-                    && (table[i].state != PULSESYNC_ENTRY_FULL); ++i)
-        ;
-
-    if (i >= PULSESYNC_MAX_ENTRIES)
-        return;   // table is empty
-
-    local_average = table[i].local_time;
-    offset_average = table[i].time_offset;
-
-    int64_t local_sum = 0;
-    int64_t offset_sum = 0;
-
-    while (++i < PULSESYNC_MAX_ENTRIES)
+    for (uint8_t i = 0; i < PULSESYNC_MAX_ENTRIES; i++)
     {
         if (table[i].state == PULSESYNC_ENTRY_FULL)
         {
-            local_sum += table[i].local_time - local_average;
-            offset_sum += table[i].time_offset - offset_average;
+            sum_local += table[i].local;
+            sum_global += table[i].global;
+            sum_local_squared += table[i].local * table[i].local;
+            covariance += table[i].local * table[i].global;
         }
     }
-
-    local_average += local_sum / table_entries;
-    offset_average += offset_sum / table_entries;
-
-    local_sum = offset_sum = 0;
-    for (i = 0; i < PULSESYNC_MAX_ENTRIES; ++i)
+    if (table_entries > 1)
     {
-        if (table[i].state == PULSESYNC_ENTRY_FULL)
-        {
-            a = table[i].local_time - local_average;
-            b = table[i].time_offset - offset_average;
-
-            local_sum += (long long) a * a;
-            offset_sum += (long long) a * b;
-        }
+        rate = (covariance - (sum_local * sum_global) / table_entries);
+        rate /= (sum_local_squared - ((sum_local * sum_local) / table_entries));
     }
-
-    if (local_sum != 0)
-        skew = (float) offset_sum / (float) local_sum;
-
-    num_entries = table_entries;
-
-    DEBUG("PULSESYNC conversion calculated: num_entries=%u, is_synced=%u\n",
-            num_entries, pulsesync_is_synced());
+    else
+    {
+        rate = 1.0;
+    }
+    offset = (sum_global - rate * sum_local) / table_entries;
+    rate -= 1;
+    DEBUG("pulsesync linear_regression calculated: table_entries=%u, is_synced=%u\n",
+            table_entries, ftsp_is_synced());
 }
 
-static void add_new_entry(pulsesync_beacon_t *beacon, gtimer_timeval_t *toa)
+//XXX: This function not only adds an entry but also removes old entries.
+static void add_new_entry(ftsp_beacon_t *beacon, gtimer_timeval_t *toa)
 {
-    DEBUG("add_new_entry");
+    uint8_t free_item = -1;
+    uint8_t oldest_item = 0;
+    uint64_t oldest_time = UINT64_MAX;
+    uint64_t limit_age = toa->local - PULSESYNC_MAX_SYNC_POINT_AGE;
 
-    free_item = -1;
-    oldest_item = 0;
-    age = 0;
-    oldest_time = 0;
+    // check for unsigned wrap around
+    if (toa->local < PULSESYNC_MAX_SYNC_POINT_AGE)
+        limit_age = 0;
 
     table_entries = 0;
 
-    time_error = (int64_t) (beacon->local + beacon->offset - toa->global);
-    if (pulsesync_is_synced() == PULSESYNC_OK)
+    int64_t time_error = (int64_t) (beacon->global - toa->global);
+    if (ftsp_is_synced() == PULSESYNC_OK)
     {
-        /*
-#ifdef DEBUG_ENABLED
-        char buf[60];
-        printf("PULSESYNC synced, error %s\n", l2s(time_error, X64LL_SIGNED, buf));
-#endif
-*/
         if ((time_error > PULSESYNC_ENTRY_THROWOUT_LIMIT)
                 || (-time_error > PULSESYNC_ENTRY_THROWOUT_LIMIT))
         {
-            DEBUG("(big)\n");
+            DEBUG("pulsesync: error large; new root elected?\n");
             if (++num_errors > 3)
             {
-                DEBUG("PULSESYNC: num_errors > 3 => clear_table()\n");
+                puts("pulsesync: number of errors to high clearing table\n");
                 clear_table();
             }
         }
         else
         {
-            DEBUG("(small)\n");
             num_errors = 0;
         }
     }
     else
     {
-        DEBUG("PULSESYNC not synced\n");
+        DEBUG("pulsesync: not synced (yet)\n");
     }
 
-    for (i = 0; i < PULSESYNC_MAX_ENTRIES; ++i)
+    for (uint8_t i = 0; i < PULSESYNC_MAX_ENTRIES; ++i)
     {
-        age = toa->local - table[i].local_time;
-
-        if (age >= 0x7FFFFFFFL)
+        if (table[i].local < limit_age)
             table[i].state = PULSESYNC_ENTRY_EMPTY;
 
         if (table[i].state == PULSESYNC_ENTRY_EMPTY)
@@ -382,9 +372,9 @@ static void add_new_entry(pulsesync_beacon_t *beacon, gtimer_timeval_t *toa)
         else
             ++table_entries;
 
-        if (age >= oldest_time)
+        if (oldest_time > table[i].local)
         {
-            oldest_time = age;
+            oldest_time = table[i].local;
             oldest_item = i;
         }
     }
@@ -395,8 +385,8 @@ static void add_new_entry(pulsesync_beacon_t *beacon, gtimer_timeval_t *toa)
         ++table_entries;
 
     table[free_item].state = PULSESYNC_ENTRY_FULL;
-    table[free_item].local_time = toa->local;
-    table[free_item].time_offset = beacon->local + beacon->offset - toa->local;
+    table[free_item].local = toa->local;
+    table[free_item].global = beacon->global;
 }
 
 static void clear_table(void)
@@ -404,25 +394,8 @@ static void clear_table(void)
     for (int8_t i = 0; i < PULSESYNC_MAX_ENTRIES; ++i)
         table[i].state = PULSESYNC_ENTRY_EMPTY;
 
-    num_entries = 0;
+    table_entries = 0;
 }
-
-#ifdef DEBUG_ENABLED
-/*
-static void print_beacon(pulsesync_beacon_t *beacon)
-{
-    char buf[66];
-    printf("----\nbeacon: \n");
-    printf("\t id: %"PRIu16"\n", beacon->id);
-    printf("\t root: %"PRIu16"\n", beacon->root);
-    printf("\t seq_number: %"PRIu16"\n", beacon->seq_number);
-    printf("\t local: %s\n", l2s(beacon->local, X64LL_SIGNED, buf));
-    printf("\t offset: %s\n", l2s(beacon->offset, X64LL_SIGNED, buf));
-    printf("\t relative_rate: %"PRId32"\n----\n",
-            (int32_t) (beacon->relative_rate * 1000 * 1000 * 1000));
-}
-*/
-#endif /* DEBUG_ENABLED */
 
 static uint16_t get_transceiver_addr(void)
 {

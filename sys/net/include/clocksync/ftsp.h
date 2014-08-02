@@ -1,5 +1,5 @@
 /**
- * ftsp.h - Declarations and types for the Flooding Time Synchronization Protocol.
+ * The flooding time synchronization protocol
  *
  * Copyright (C) 2014  Philipp Rosenkranz, Daniel Jentsch
  *
@@ -9,13 +9,16 @@
  */
 
 /**
- * @defgroup ftsp    FTSP - Flooding Time Synchronization Protocol.
+ * @defgroup ftsp FTSP (Flooding Time Synchronization Protocol)
  * @ingroup  net
- * @brief    The Flooding Time Synchronization Protocol is a clock synchronization protocol
- *           which tries to synchronizes not only the clock values but also the clock rate
- *           of all nodes in a network. It builds a spanning tree and synchronizes every node
- *           to their root. The level of a node in this tree is determined by its ID relative to
- *           its neighboring nodes.
+ * The Flooding Time Synchronization Protocol is a clock synchronization protocol
+ * which tries to synchronizes not only the clock values but also the clock rate
+ * of all nodes in a network.
+ *
+ * The protocol builds an implicit spanning tree and synchronizes every node
+ * to their root. Each node forwards synchronization information to their
+ * children as soon as the node decides it is sufficiently synchronized
+ * against its parent node.
  * @see      <a href="http://dl.acm.org/citation.cfm?id=1031501">
  *              Maroti et.al.: The flooding time synchronization protocol
  *           </a>
@@ -40,20 +43,12 @@ typedef struct  __attribute__((packed)) {
     uint64_t global;
 } ftsp_beacon_t;
 
-
-typedef struct ftsp_sync_point {
-    uint16_t src; // TODO: only for debugging
-    uint64_t local;
-    uint64_t global;
-} ftsp_sync_point_t;
-
 typedef struct table_item
 {
     uint8_t state;
     uint64_t local;
     uint64_t global;
-} table_item;
-
+} ftsp_table_item_t;
 
 
 /**
@@ -67,11 +62,11 @@ void ftsp_init(void);
 void ftsp_set_beacon_delay(uint32_t delay_in_sec);
 
 /**
- * @brief sets the minimal delay between sending and receiving a beacon.
+ * Sets the minimal delay between sending and receiving a beacon.
  * To be more specific: Let t_s be the time when a timestamp is applied to a beacon
  * shortly before it is sent and t_r the time when the time of arrival
  * of this sent beacon is recorded at the receiver. The difference of t_s
- * and t_r then signifies the delay between sending and receiving a beacon.
+ * and t_r then signifies the delay between the sending and receiving of a beacon.
  * This delay has to be determined for every platform (read: for different MCU /
  * transceiver combinations).
  */
