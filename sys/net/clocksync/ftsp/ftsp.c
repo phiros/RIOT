@@ -93,7 +93,7 @@ static uint16_t root_id = UINT16_MAX;
 static uint16_t node_id = 0;
 static uint8_t table_entries, heart_beats, num_errors, seq_num;
 static int64_t offset;
-static float skew;
+static float rate;
 static table_item table[FTSP_MAX_ENTRIES];
 mutex_t ftsp_mutex;
 
@@ -107,7 +107,7 @@ void ftsp_init(void)
 {
     mutex_init(&ftsp_mutex);
 
-    skew = 0.0;
+    rate = 0.0;
     clear_table();
     heart_beats = 0;
     num_errors = 0;
@@ -228,13 +228,13 @@ void ftsp_mac_read(uint8_t *frame_payload, uint16_t src, gtimer_timeval_t *toa)
 
     add_new_entry(beacon, toa);
     linear_regression();
-    int64_t est_global = offset + ((int64_t) toa->local) * (skew + 1);
+    int64_t est_global = offset + ((int64_t) toa->local) * (rate + 1);
     int64_t offset = est_global - (int64_t) toa->global;
 
     gtimer_sync_set_global_offset(offset);
     if (table_entries >= FTSP_RATE_CALC_THRESHOLD)
     {
-        gtimer_sync_set_relative_rate(skew);
+        gtimer_sync_set_relative_rate(rate);
     }
     mutex_unlock(&ftsp_mutex);
 }
@@ -266,7 +266,7 @@ void ftsp_resume(void)
     {
         root_id = 0xFFFF;
     }
-    skew = 0.0;
+    rate = 0.0;
     clear_table();
     heart_beats = 0;
     num_errors = 0;
@@ -329,15 +329,15 @@ static void linear_regression(void)
     }
     if(table_entries>1)
     {
-        skew = (covariance - (sum_local * sum_global) / table_entries);
-        skew /= (sum_local_squared - ((sum_local * sum_local) / table_entries));
+        rate = (covariance - (sum_local * sum_global) / table_entries);
+        rate /= (sum_local_squared - ((sum_local * sum_local) / table_entries));
     }
     else
     {
-        skew = 1.0;
+        rate = 1.0;
     }
-    offset = (sum_global - skew * sum_local) / table_entries;
-    skew -= 1;
+    offset = (sum_global - rate * sum_local) / table_entries;
+    rate -= 1;
     DEBUG("FTSP linear_regression calculated: num_entries=%u, is_synced=%u\n",
             table_entries, ftsp_is_synced());
 }
