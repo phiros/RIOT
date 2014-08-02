@@ -147,7 +147,11 @@ static void *beacon_thread(void *arg)
 
 static void send_beacon(void)
 {
-    puts("pulsesync: send_beacon\n");
+    //puts("pulsesync: send_beacon\n");
+    if (node_id == PULSESYNC_PREFERRED_ROOT)
+        seq_num++;
+    printf("sending beacon with seq_num: %"PRIu16 "\n", seq_num);
+
     gtimer_timeval_t now;
     pulsesync_beacon_t *pulsesync_beacon = (pulsesync_beacon_t *) beacon_buffer;
 
@@ -162,7 +166,6 @@ static void send_beacon(void)
 
     sixlowpan_mac_send_ieee802154_frame(0, NULL, 8, beacon_buffer,
             sizeof(pulsesync_beacon_t), 1);
-    seq_num++;
 }
 
 void pulsesync_mac_read(uint8_t *frame_payload, uint16_t src,
@@ -170,13 +173,24 @@ void pulsesync_mac_read(uint8_t *frame_payload, uint16_t src,
 {
     DEBUG("pulsesync_mac_read: pulsesync_mac_read");
     mutex_lock(&pulsesync_mutex);
-    pulsesync_beacon_t *beacon = (pulsesync_beacon_t *) frame_payload;
+    pulsesync_beacon_t gtsp_beacon;
+
+    // copy beacon into local buffer
+    memcpy(&gtsp_beacon, frame_payload, sizeof(gtsp_beacon_t));
+    pulsesync_beacon_t *beacon = &gtsp_beacon;
 
     if (pause_protocol || node_id == PULSESYNC_PREFERRED_ROOT)
     {
         mutex_unlock(&pulsesync_mutex);
         return;
     }
+    char buf[60];
+    printf("pulsesync_mac_read ");
+    printf("beacon->dispatch_marker: %"PRIu8 " ", beacon->dispatch_marker);
+    printf("beacon->id: %"PRIu16 " ", beacon->id);
+    printf("beacon->root: %"PRIu16 " ", beacon->root);
+    printf("beacon->seq_number: %"PRIu16 " ", beacon->seq_number);
+    printf("beacon->global: %s\n", l2s(beacon->global, X64LL_SIGNED, buf));
 
 //    if ((beacon->root < root_id)
 //            && !((heart_beats < PULSESYNC_IGNORE_ROOT_MSG)
@@ -187,22 +201,34 @@ void pulsesync_mac_read(uint8_t *frame_payload, uint16_t src,
 //    }
 //    else
 //    {
-        if ((root_id == beacon->root)
-                && (
-                        (beacon->seq_number > seq_num && beacon->seq_number - seq_num < UINT16_MAX - 100)
-                        ||
-                        (beacon->seq_number < seq_num && seq_num - beacon->seq_number > UINT16_MAX - 100)))
-        {
-            seq_num = beacon->seq_number;
-        }
-        else
-        {
-            DEBUG(
-                    "not (beacon->root < pulsesync_root_id) [...] and not (pulsesync_root_id == beacon->root)");
-            mutex_unlock(&pulsesync_mutex);
-            return;
-        }
+
+//        if ((root_id == beacon->root)
+//                && (
+//                        (beacon->seq_number > seq_num && beacon->seq_number - seq_num < UINT16_MAX - 100)
+//                        ||
+//                        (beacon->seq_number < seq_num && seq_num - beacon->seq_number > UINT16_MAX - 100)))
+//        {
+//            seq_num = beacon->seq_number;
+//        }
+//        else
+//        {
+//            DEBUG(
+//                    "not (beacon->root < pulsesync_root_id) [...] and not (pulsesync_root_id == beacon->root)");
+//            mutex_unlock(&pulsesync_mutex);
+//            return;
+//        }
+
 //    }
+
+    if ((root_id == beacon->root) && (beacon->seq_number > seq_num))
+    {
+        seq_num = beacon->seq_number;
+    }
+    else
+    {
+        mutex_unlock(&pulsesync_mutex);
+        return;
+    }
 
 //    if (root_id < node_id)
 //        heart_beats = 0;
@@ -211,21 +237,21 @@ void pulsesync_mac_read(uint8_t *frame_payload, uint16_t src,
     linear_regression();
     int64_t est_global = offset + ((int64_t) toa->local) * (rate);
     int64_t offset_global = est_global - (int64_t) toa->global;
-/*
-    if (offset > 10 * 1000 * 1000 || offset < -10 * 1000 * 1000)
-    {
-        char buf[60];
-        printf("est_global: %s ", l2s(est_global, X64LL_SIGNED, buf));
-        printf("offset: %s ", l2s(offset, X64LL_SIGNED, buf));
-        printf("toa->local: %s ", l2s(toa->local, X64LL_SIGNED, buf));
-        printf("toa->global: %s ", l2s(toa->global, X64LL_SIGNED, buf));
-        printf("rate: %f ", rate);
-        printf("offset_global: %s ", l2s(offset, X64LL_SIGNED, buf));
-        printf("table_entries: %"PRIu8 " ", table_entries);
-        printf("culprit: %"PRIu16 " ", src);
-        printf("culprit gl: %s\n", l2s(beacon->global, X64LL_SIGNED, buf));
-    }
-*/
+    /*
+     if (offset > 10 * 1000 * 1000 || offset < -10 * 1000 * 1000)
+     {
+     char buf[60];
+     printf("est_global: %s ", l2s(est_global, X64LL_SIGNED, buf));
+     printf("offset: %s ", l2s(offset, X64LL_SIGNED, buf));
+     printf("toa->local: %s ", l2s(toa->local, X64LL_SIGNED, buf));
+     printf("toa->global: %s ", l2s(toa->global, X64LL_SIGNED, buf));
+     printf("rate: %f ", rate);
+     printf("offset_global: %s ", l2s(offset, X64LL_SIGNED, buf));
+     printf("table_entries: %"PRIu8 " ", table_entries);
+     printf("culprit: %"PRIu16 " ", src);
+     printf("culprit gl: %s\n", l2s(beacon->global, X64LL_SIGNED, buf));
+     }
+     */
 
     offset = offset_global;
 
@@ -237,8 +263,8 @@ void pulsesync_mac_read(uint8_t *frame_payload, uint16_t src,
 
     mutex_unlock(&pulsesync_mutex);
 
-    timex_t wait = timex_from_uint64(1000 +
-            (genrand_uint32() % PULSESYNC_BEACON_PROPAGATION_DELAY));
+    timex_t wait = timex_from_uint64(
+            1000 + (genrand_uint32() % PULSESYNC_BEACON_PROPAGATION_DELAY));
 
     vtimer_set_wakeup(&beacon_timer, wait, beacon_thread_id);
 }
@@ -383,7 +409,8 @@ static void add_new_entry(pulsesync_beacon_t *beacon, gtimer_timeval_t *toa)
     int del_because_old = 0;
     for (uint8_t i = 0; i < PULSESYNC_MAX_ENTRIES; ++i)
     {
-        if (table[i].local < limit_age) {
+        if (table[i].local < limit_age)
+        {
             table[i].state = PULSESYNC_ENTRY_EMPTY;
             del_because_old++;
         }
