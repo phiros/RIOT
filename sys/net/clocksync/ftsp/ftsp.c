@@ -32,6 +32,8 @@
 #include "sixlowpan/dispatch_values.h"
 #include "gtimer.h"
 
+#include "x64toa.h"
+
 
 #define ENABLE_DEBUG (0)
 #if ENABLE_DEBUG
@@ -68,8 +70,8 @@
 #define FTSP_ENTRY_EMPTY (0)
 #define FTSP_ENTRY_FULL (1)
 
-#define FTSP_BEACON_STACK_SIZE (KERNEL_CONF_STACKSIZE_DEFAULT)
-#define FTSP_CYCLIC_STACK_SIZE (KERNEL_CONF_STACKSIZE_DEFAULT)
+#define FTSP_BEACON_STACK_SIZE (KERNEL_CONF_STACKSIZE_PRINTF_FLOAT)
+#define FTSP_CYCLIC_STACK_SIZE (KERNEL_CONF_STACKSIZE_PRINTF_FLOAT)
 #define FTSP_BEACON_BUFFER_SIZE (64)
 
 // threads
@@ -94,12 +96,12 @@ static uint16_t node_id = 0;
 static uint8_t table_entries, heart_beats, num_errors, seq_num;
 static int64_t offset;
 static float rate;
-static ftsp_table_item_t table[FTSP_MAX_ENTRIES];
+ftsp_table_item_t table[FTSP_MAX_ENTRIES];
 
 static char ftsp_beacon_stack[FTSP_BEACON_STACK_SIZE];
 static char ftsp_cyclic_stack[FTSP_CYCLIC_STACK_SIZE];
-static char ftsp_beacon_buffer[FTSP_BEACON_BUFFER_SIZE] =
-{ 0 }
+char ftsp_beacon_buffer[FTSP_BEACON_BUFFER_SIZE] =
+{ 0 };
 
 mutex_t ftsp_mutex;
 
@@ -108,7 +110,7 @@ void ftsp_init(void)
 {
     mutex_init(&ftsp_mutex);
 
-    rate = 0.0;
+    rate = 1.0;
     clear_table();
     heart_beats = 0;
     num_errors = 0;
@@ -229,13 +231,29 @@ void ftsp_mac_read(uint8_t *frame_payload, uint16_t src, gtimer_timeval_t *toa)
 
     add_new_entry(beacon, toa);
     linear_regression();
-    int64_t est_global = offset + ((int64_t) toa->local) * (rate + 1);
-    int64_t offset = est_global - (int64_t) toa->global;
+    int64_t est_global = offset + ((int64_t) toa->local) * (rate);
+    int64_t offset_global = est_global - (int64_t) toa->global;
 
-    gtimer_sync_set_global_offset(offset);
+    if(offset > 10*1000*1000 || offset < -10*1000*1000)
+    {
+        char buf[60];
+        printf("est_global: %s ", l2s(est_global, X64LL_SIGNED, buf));
+        printf("offset: %s ", l2s(offset, X64LL_SIGNED, buf));
+        printf("toa->local: %s ", l2s(toa->local, X64LL_SIGNED, buf));
+        printf("toa->global: %s ", l2s(toa->global, X64LL_SIGNED, buf));
+        printf("rate: %f ", rate);
+        printf("offset_global: %s ", l2s(offset, X64LL_SIGNED, buf));
+        printf("table_entries: %"PRIu8 " ", table_entries);
+        printf("culprit: %"PRIu16 " ", src);
+        printf("culprit gl: %s\n", l2s(beacon->global, X64LL_SIGNED, buf));
+    }
+
+    offset = offset_global;
+
+    gtimer_sync_set_global_offset(offset_global);
     if (table_entries >= FTSP_RATE_CALC_THRESHOLD)
     {
-        gtimer_sync_set_relative_rate(rate);
+        gtimer_sync_set_relative_rate(rate -1);
     }
     mutex_unlock(&ftsp_mutex);
 }
@@ -268,7 +286,7 @@ void ftsp_resume(void)
     {
         root_id = 0xFFFF;
     }
-    rate = 0.0;
+    rate = 1.0;
     clear_table();
     heart_beats = 0;
     num_errors = 0;
@@ -327,15 +345,15 @@ static void linear_regression(void)
     }
     if(table_entries>1)
     {
-        rate = (covariance - (sum_local * sum_global) / table_entries);
-        rate /= (sum_local_squared - ((sum_local * sum_local) / table_entries));
+        //rate = (covariance - (sum_local * sum_global) / table_entries);
+        //rate /= (sum_local_squared - ((sum_local * sum_local) / table_entries));
     }
     else
     {
-        rate = 1.0;
+        //rate = 1.0;
     }
     offset = (sum_global - rate * sum_local) / table_entries;
-    rate -= 1;
+
     DEBUG("FTSP linear_regression calculated: num_entries=%u, is_synced=%u\n",
             table_entries, ftsp_is_synced());
 }
@@ -377,10 +395,13 @@ static void add_new_entry(ftsp_beacon_t *beacon, gtimer_timeval_t *toa)
         DEBUG("ftsp: not synced (yet)\n");
     }
 
+    int del_because_old = 0;
     for (uint8_t i = 0; i < FTSP_MAX_ENTRIES; ++i)
     {
-        if (table[i].local < limit_age)
+        if (table[i].local < limit_age) {
             table[i].state = FTSP_ENTRY_EMPTY;
+            del_because_old++;
+        }
 
         if (table[i].state == FTSP_ENTRY_EMPTY)
             free_item = i;
@@ -402,6 +423,12 @@ static void add_new_entry(ftsp_beacon_t *beacon, gtimer_timeval_t *toa)
     table[free_item].state = FTSP_ENTRY_FULL;
     table[free_item].local = toa->local;
     table[free_item].global = beacon->global;
+
+    char buf[60];
+    printf("free_item: %"PRIu8 " ", free_item);
+    printf("oldest_item: %"PRIu8 " ", oldest_item);
+    printf("table_entries: %"PRIu8 " ", table_entries);
+    printf("del_because_old: %d\n", del_because_old);
 }
 
 static void clear_table(void)
