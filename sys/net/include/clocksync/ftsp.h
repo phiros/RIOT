@@ -33,51 +33,26 @@
 #include "radio/types.h"
 
 typedef struct  __attribute__((packed)) {
-	uint8_t dispatch_marker; // << protocol marker
+    uint8_t dispatch_marker; // << protocol marker
     uint16_t id;
     uint16_t root;
     uint16_t seq_number;
-    uint64_t local;
-    int64_t offset;
-    float relative_rate; // << sender logical clockrate
+    uint64_t global;
 } ftsp_beacon_t;
 
 
 typedef struct ftsp_sync_point {
     uint16_t src; // TODO: only for debugging
     uint64_t local;
-    int64_t offset;
+    uint64_t global;
 } ftsp_sync_point_t;
-
-enum
-{
-  FTSP_OK = 1,
-  FTSP_ERR = 0,
-};
-
-enum
-{
-    FTSP_MAX_ENTRIES           = 8,              // number of entries in the table
-    FTSP_ROOT_TIMEOUT          = 3,              // time to declare itself the root if no msg was received (in sync periods)
-    FTSP_IGNORE_ROOT_MSG       = 4,              // after becoming the root ignore other roots messages (in send period)
-    FTSP_ENTRY_VALID_LIMIT     = 4,              // number of entries to become synchronized
-    FTSP_ENTRY_SEND_LIMIT      = 3,              // number of entries to send sync messages
-    FTSP_ENTRY_THROWOUT_LIMIT  = 300,             // if time sync error is bigger than this (in 32 kHz ticks) clear the table
-};
-
-enum
-{
-    FTSP_ENTRY_EMPTY = 0,
-    FTSP_ENTRY_FULL  = 1,
-};
 
 typedef struct table_item
 {
-    uint8_t             state;
-    uint64_t            local_time;
-    int64_t             time_offset;        // global-time - local_time
+    uint8_t state;
+    uint64_t local;
+    uint64_t global;
 } table_item;
-
 
 
 
