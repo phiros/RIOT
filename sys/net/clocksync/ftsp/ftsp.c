@@ -345,12 +345,12 @@ static void linear_regression(void)
     }
     if(table_entries>1)
     {
-        //rate = (covariance - (sum_local * sum_global) / table_entries);
-        //rate /= (sum_local_squared - ((sum_local * sum_local) / table_entries));
+        rate = (covariance - (sum_local * sum_global) / table_entries);
+        rate /= (sum_local_squared - ((sum_local * sum_local) / table_entries));
     }
     else
     {
-        //rate = 1.0;
+        rate = 1.0;
     }
     offset = (sum_global - rate * sum_local) / table_entries;
 
@@ -361,7 +361,7 @@ static void linear_regression(void)
 //XXX: This function not only adds an entry but also removes old entries.
 static void add_new_entry(ftsp_beacon_t *beacon, gtimer_timeval_t *toa)
 {
-    uint8_t free_item = -1;
+    int8_t free_item = -1;
     uint8_t oldest_item = 0;
     uint64_t oldest_time = UINT64_MAX;
     uint64_t limit_age = toa->local - FTSP_MAX_SYNC_POINT_AGE;
@@ -425,7 +425,7 @@ static void add_new_entry(ftsp_beacon_t *beacon, gtimer_timeval_t *toa)
     table[free_item].global = beacon->global;
 
     char buf[60];
-    printf("free_item: %"PRIu8 " ", free_item);
+    printf("free_item: %"PRId8 " ", free_item);
     printf("oldest_item: %"PRIu8 " ", oldest_item);
     printf("table_entries: %"PRIu8 " ", table_entries);
     printf("del_because_old: %d\n", del_because_old);

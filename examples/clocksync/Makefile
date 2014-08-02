@@ -49,7 +49,7 @@ ifneq (,$(filter msba2,$(BOARD)))
 	USEMODULE += mci
 	USEMODULE += config
 	USEMODULE += random
-	USEMODULE += ftsp
+	USEMODULE += pulsesync
 	USEMODULE += clocksync_eval
 endif
 ifneq (,$(filter avsextrem,$(BOARD)))
