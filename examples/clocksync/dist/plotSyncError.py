@@ -12,6 +12,7 @@ def print_help():
   supportedProtocols = ["gtsp", "ftsp", "pulsesync"]
   print "plotSyncError.py [-s -p <protocol>] [-G|-L] [-o output]<path-to-log-files>"
   print "-a: shows all measure points, not only the upper bound"
+  print "-A: adjenc graph"
   print "-G: global error"
   print "-L: local error"
   print "-o file:"
@@ -33,9 +34,14 @@ def main(argv):
   synconly = False
   out = False
   showAllPoints = False
+  # Determite the output type.
+  # is "Local", "Global", "Adj"
+  show = "Local"
+  def showIsAPlot():
+    return show != "Adj"
 
   try:
-    opts, logdirs = getopt.getopt(argv,"o:hp:GLy:sa",["output=", "protocol=", "Global", "Local", "y-range=", "sync-only", "all-points"])
+    opts, logdirs = getopt.getopt(argv,"o:hp:AGLy:sa",["output=", "Global", "Local", "y-range=", "all-points"])
   except getopt.GetoptError:
     print_help()
     sys.exit(2)
@@ -46,9 +52,11 @@ def main(argv):
     elif opt in ("-p", "--protocol"):
       protocol = arg
     elif opt in ("-G", "--Global"):
-      globalError = True
+      show = "Global"
     elif opt in ("-L", "--Local"):
-      globalError = False
+      show = "Local"
+    elif opt in ("-A", "--adjenc"):
+      show = "Adj"
     elif opt in ("-y", "--y-range"):
       yrange = int(arg)
     elif opt in ("-s", "--sync-only"):
@@ -63,27 +71,23 @@ def main(argv):
     print_help()
     sys.exit(2)
 
-  if synconly:
-    if not protocol:
-      print "No protocol given"
-      print_help()
-      sys.exit(1)
-    logas = [ClocksyncEvalLogAnalyzer(logdir, ".*" + protocol +  " on.*", ".*" + protocol +  " off.*") for logdir in logdirs]
-  else:
-    logas = [ClocksyncEvalLogAnalyzer(logdir, ".*RIOT.*", "$a") for logdir in logdirs]
+  logas = [ClocksyncEvalLogAnalyzer(logdir, ".*RIOT.*", "$a") for logdir in logdirs]
 
   if len(logas) > len(colors):
     print "Warning: more log folders than colors defined"
     print "         plotting some graphs with same color"
 
-  if globalError:
+  if show == "Global":
     pylab.title("global sync error")
     for loga in logas:
       # xvals = pylab.linspace(loga.minBackboneTime, loga.maxBackboneTime, 100)
       # yvals = global_diff_wrapper(loga, xvals)
       # pylab.plot(xvals, yvals, label = loga.name)
       pylab.plot(loga.backVsGlobal.keys(), loga.backVsGlobal.values(), "x", label = loga.name)
-  else:
+
+      pylab.xlabel("Reference time in $s$")
+      pylab.ylabel("Global error in $\mu s$")
+  elif show == "Local":
     pylab.title("local sync error")
     colorIndex = 0
     for loga in logas:
@@ -97,11 +101,21 @@ def main(argv):
       if showAllPoints:
         pylab.plot(loga.localError.keys(), loga.localError.values(), "x", color = color)
 
-  if yrange>0:
-    pylab.ylim([0,yrange])
+      pylab.xlabel("Reference time in $s$")
+      pylab.ylabel("Local error in $\mu s$")
+  elif show == "Adj":
+    import networkx as nx
+    G = nx.Graph()
+    for loga in logas:
+      for relation in loga.adjDict:
+        G.add_edge(*relation)
+    nx.draw(G)
 
-  pylab.xlabel("Reference time in $s$")
-  pylab.ylabel("Error in $\mu s$")
+  if yrange>0:
+    if showIsAPlot():
+      pylab.ylim([0,yrange])
+    else:
+      print "-y, --y-range without a plot"
 
   if len(logas) > 1:
     pylab.legend(loc='upper right')
