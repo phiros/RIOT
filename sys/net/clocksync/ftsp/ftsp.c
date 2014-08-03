@@ -34,7 +34,6 @@
 
 #include "x64toa.h"
 
-
 #define ENABLE_DEBUG (0)
 #if ENABLE_DEBUG
 #define DEBUG_ENABLED
@@ -42,7 +41,7 @@
 #include <debug.h>
 
 #ifdef MODULE_CC110X_NG
-#define FTSP_CALIBRATION_OFFSET ((uint32_t) 2300)
+#define FTSP_CALIBRATION_OFFSET ((uint32_t) 2220)
 
 #elif MODULE_NATIVENET
 #define FTSP_CALIBRATION_OFFSET ((uint32_t) 1500)
@@ -63,6 +62,8 @@
 #define FTSP_ROOT_TIMEOUT (3) // time to declare itself the root if no msg was received (in sync periods)
 #define FTSP_IGNORE_ROOT_MSG (4) // after becoming the root ignore other roots messages (in send period)
 #define FTSP_ENTRY_THROWOUT_LIMIT (300) // if time sync error is bigger than this clear the table
+#define FTSP_SANE_OFFSET_CHECK (1)
+#define FTSP_SANE_OFFSET_THRESHOLD ((int64_t)3145 * 10 * 1000 * 1000 * 1000) // 1 year in us
 
 // easy to read status flags
 #define FTSP_OK (1)
@@ -97,6 +98,9 @@ static uint8_t table_entries, heart_beats, num_errors, seq_num;
 static int64_t offset;
 static float rate;
 ftsp_table_item_t table[FTSP_MAX_ENTRIES];
+#ifdef FTSP_SANE_OFFSET_CHECK
+static uint64_t last_global = 0;
+#endif
 
 static char ftsp_beacon_stack[FTSP_BEACON_STACK_SIZE];
 static char ftsp_cyclic_stack[FTSP_CYCLIC_STACK_SIZE];
@@ -104,7 +108,6 @@ char ftsp_beacon_buffer[FTSP_BEACON_BUFFER_SIZE] =
 { 0 };
 
 mutex_t ftsp_mutex;
-
 
 void ftsp_init(void)
 {
@@ -176,11 +179,20 @@ static void send_beacon(void)
         else
         {
             gtimer_sync_now(&now);
+#if FTSP_SANE_OFFSET_CHECK
+            if(now.global > last_global + FTSP_SANE_OFFSET_THRESHOLD)
+            {
+                puts("send_beacon: trying to send abnormal high value");
+                return;
+            }
+            last_global = now.global;
+#endif
             ftsp_beacon->dispatch_marker = FTSP_PROTOCOL_DISPATCH;
             ftsp_beacon->id = node_id;
             ftsp_beacon->global = now.global + transmission_delay;
             ftsp_beacon->root = root_id;
             ftsp_beacon->seq_number = seq_num;
+
             sixlowpan_mac_send_ieee802154_frame(0, NULL, 8, ftsp_beacon_buffer,
                     sizeof(ftsp_beacon_t), 1);
 
@@ -203,6 +215,20 @@ void ftsp_mac_read(uint8_t *frame_payload, uint16_t src, gtimer_timeval_t *toa)
         mutex_unlock(&ftsp_mutex);
         return;
     }
+
+#if FTSP_SANE_OFFSET_CHECK
+    if (ftsp_is_synced())
+    {
+        if(offset > FTSP_SANE_OFFSET_THRESHOLD
+                || offset < -FTSP_SANE_OFFSET_THRESHOLD)
+        {
+            puts("ftsp_mac_read: offset calculation yielded abnormal high value");
+            puts("ftsp_mac_read: skipping offending beacon");
+            mutex_unlock(&ftsp_mutex);
+            return;
+        }
+    }
+#endif /* FTSP_SANE_OFFSET_CHECK */
 
     if ((beacon->root < root_id)
             && !((heart_beats < FTSP_IGNORE_ROOT_MSG) && (root_id == node_id)))
@@ -234,7 +260,7 @@ void ftsp_mac_read(uint8_t *frame_payload, uint16_t src, gtimer_timeval_t *toa)
     int64_t est_global = offset + ((int64_t) toa->local) * (rate);
     int64_t offset_global = est_global - (int64_t) toa->global;
 
-    if(offset > 10*1000*1000 || offset < -10*1000*1000)
+    if (offset > 10 * 1000 * 1000 || offset < -10 * 1000 * 1000)
     {
         char buf[60];
         printf("est_global: %s ", l2s(est_global, X64LL_SIGNED, buf));
@@ -253,7 +279,7 @@ void ftsp_mac_read(uint8_t *frame_payload, uint16_t src, gtimer_timeval_t *toa)
     gtimer_sync_set_global_offset(offset_global);
     if (table_entries >= FTSP_RATE_CALC_THRESHOLD)
     {
-        gtimer_sync_set_relative_rate(rate -1);
+        gtimer_sync_set_relative_rate(rate - 1);
     }
     mutex_unlock(&ftsp_mutex);
 }
@@ -311,6 +337,13 @@ void ftsp_driver_timestamp(uint8_t *ieee802154_frame, uint8_t frame_length)
                 frame_length);
         ftsp_beacon_t *beacon = (ftsp_beacon_t *) frame.payload;
         gtimer_sync_now(&now);
+#if FTSP_SANE_OFFSET_CHECK
+        if (now.global > last_global + FTSP_SANE_OFFSET_THRESHOLD)
+        {
+            puts("send_beacon: trying to send abnormal high value");
+            return;
+        }
+#endif
         beacon->global = now.global + transmission_delay;
         memcpy(ieee802154_frame + hdrlen, beacon, sizeof(ftsp_beacon_t));
     }
@@ -327,8 +360,8 @@ int ftsp_is_synced(void)
 static void linear_regression(void)
 {
     DEBUG("linear_regression");
-    int64_t sum_local = 0, sum_global = 0, covariance = 0, sum_local_squared =
-            0;
+    int64_t sum_local = 0, sum_global = 0, covariance = 0,
+            sum_local_squared = 0;
 
     if (table_entries == 0)
         return;
@@ -343,7 +376,7 @@ static void linear_regression(void)
             covariance += table[i].local * table[i].global;
         }
     }
-    if(table_entries>1)
+    if (table_entries > 1)
     {
         rate = (covariance - (sum_local * sum_global) / table_entries);
         rate /= (sum_local_squared - ((sum_local * sum_local) / table_entries));
@@ -398,7 +431,8 @@ static void add_new_entry(ftsp_beacon_t *beacon, gtimer_timeval_t *toa)
     int del_because_old = 0;
     for (uint8_t i = 0; i < FTSP_MAX_ENTRIES; ++i)
     {
-        if (table[i].local < limit_age) {
+        if (table[i].local < limit_age)
+        {
             table[i].state = FTSP_ENTRY_EMPTY;
             del_because_old++;
         }
