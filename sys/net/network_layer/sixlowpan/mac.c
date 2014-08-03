@@ -56,7 +56,7 @@
 #include "clocksync/clocksync_eval.h"
 #endif
 
-#define RADIO_STACK_SIZE            (KERNEL_CONF_STACKSIZE_PRINTF_FLOAT)
+#define RADIO_STACK_SIZE            (KERNEL_CONF_STACKSIZE_MAIN)
 #define RADIO_RCV_BUF_SIZE          (64)
 #define RADIO_SENDING_DELAY         (1000)
 
