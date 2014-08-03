@@ -292,6 +292,10 @@ class ClocksyncEvalLogAnalyzer():
                     self.triggerDict[hostName][beaconSender][beaconCounter] = serverTimeStamp, globalTime, localTime
 
                     # Updating adj dict
+                    if not self.hosts.has_key(beaconSender):
+                      print "Found an alien: " + str(beaconSender)
+                      continue
+
                     relation = self.hosts[beaconSender], hostName
                     if not self.adjDict.has_key(relation):
                         self.adjDict[relation] = 1.0
