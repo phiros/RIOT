@@ -5,24 +5,6 @@ import os, re, math, sys, pylab
 import time, calendar, collections
 import numpy as np
 
-def basic_linear_regression(loc, glob):
-    # Basic computations to save a little time.
-    length = len(loc)
-    sum_loc = sum(loc)
-    sum_glob = sum(glob)
-    print sum_loc, sum_glob
-    sum_loc_squared = sum(map(lambda a: a * a, loc))
-    print sum_loc_squared
-    covariance = sum([loc[i] * glob[i] for i in range(length)])
-    print covariance
-
-    # Magic formulae!  
-    skew = (covariance * length - (sum_loc * sum_glob)) 
-    skew /= (sum_loc_squared * length - (sum_loc ** 2))
-    offset = (sum_glob - skew * sum_loc) / length
-
-    return skew, offset
-
 class ClocksyncEvalLogAnalyzer():
     def __init__(self, logdir, beginRe = ".*", endRe = ".*"):
         self.name = logdir
@@ -79,14 +61,6 @@ class ClocksyncEvalLogAnalyzer():
               for trigger in self.triggerDict[rec][sender]:
                   server, glob, local = self.triggerDict[rec][sender][trigger]
                   self.triggerDict[rec][sender][trigger] = server - self.firstTime, glob, local
-
-        skew, offset = basic_linear_regression(self.backVsGlobal.keys(), self.backVsGlobal.values())
-        newBackVsGlobal = dict()
-
-        for server, glob in self.backVsGlobal.items():
-            # glob += diffGlobal * (server - minimalServer) / diffServer
-            newBackVsGlobal[server] = glob - server * skew
-        self.backVsGlobal = newBackVsGlobal
 
         self.triggerToMaxLocalError()
         self.heartBeatToGlobalError()
@@ -279,34 +253,35 @@ class ClocksyncEvalLogAnalyzer():
                     serverTimeStamp = self.dateTimeToTimeStamp(serverDate, serverTime)
                     beaconSender = int(tuple[2])
 
-                    #TODO: Remove this evil filter
-                    if beaconSender > 200:
-                        continue
-                    beaconCounter = int(tuple[3])
-                    localTime = int(tuple[4])
-                    globalTime = int(tuple[5])
-                    if not self.firstTime or self.firstTime > serverTimeStamp:
-                        self.firstTime = serverTimeStamp
+                    try:
+                        beaconCounter = int(tuple[3])
+                        localTime = int(tuple[4])
+                        globalTime = int(tuple[5])
+                        if not self.firstTime or self.firstTime > serverTimeStamp:
+                            self.firstTime = serverTimeStamp
 
-                    if not self.triggerDict.has_key(hostName):
-                        self.triggerDict[hostName] = dict()
-                    if not self.triggerDict[hostName].has_key(beaconSender):
-                        self.triggerDict[hostName][beaconSender] = dict()
-                    self.triggerDict[hostName][beaconSender][beaconCounter] = serverTimeStamp, globalTime, localTime
+                        if not self.triggerDict.has_key(hostName):
+                            self.triggerDict[hostName] = dict()
+                        if not self.triggerDict[hostName].has_key(beaconSender):
+                            self.triggerDict[hostName][beaconSender] = dict()
+                        self.triggerDict[hostName][beaconSender][beaconCounter] = serverTimeStamp, globalTime, localTime
 
-                    # Updating adj dict
-                    if not self.hosts.has_key(beaconSender):
-                      print "Found an alien: " + str(beaconSender)
-                      continue
+                        # Updating adj dict
+                        if not self.hosts.has_key(beaconSender):
+                          print "Found an alien: " + str(beaconSender)
+                          continue
 
-                    relation = self.hosts[beaconSender], hostName
-                    if not self.adjDict.has_key(relation):
-                        self.adjDict[relation] = 1.0
-                    else:
-                        self.adjDict[relation] += 1.0
+                        relation = self.hosts[beaconSender], hostName
+                        if not self.adjDict.has_key(relation):
+                            self.adjDict[relation] = 1.0
+                        else:
+                            self.adjDict[relation] += 1.0
 
-                    if self.adjDict[relation] > self.maxAdj:
-                        self.maxAdj = self.adjDict[relation]
+                        if self.adjDict[relation] > self.maxAdj:
+                            self.maxAdj = self.adjDict[relation]
+                    except Exception, e:
+                        print "Multithread: " + line
+
 
 
     def triggerToMaxLocalError(self):
