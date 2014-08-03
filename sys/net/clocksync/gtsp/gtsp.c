@@ -33,7 +33,7 @@
 #include "sixlowpan/dispatch_values.h"
 
 #ifdef MODULE_CC110X_NG
-#define GTSP_CALIBRATION_OFFSET ((uint32_t) 2300)
+#define GTSP_CALIBRATION_OFFSET ((uint32_t) 2220)
 
 #elif MODULE_NATIVENET
 #define GTSP_CALIBRATION_OFFSET ((uint32_t) 1500)
@@ -54,9 +54,11 @@
 #define GTSP_BEACON_INTERVAL (30 * 1000 * 1000)  // in us
 #define GTSP_JUMP_THRESHOLD (10) // in us
 #define GTSP_MOVING_ALPHA 0.9
+#define GTSP_SANE_OFFSET_CHECK (1)
+#define GTSP_SANE_OFFSET_THRESHOLD ((int64_t)3145 * 10 * 1000 * 1000 * 1000) // 1 year in us
 
-#define GTSP_BEACON_STACK_SIZE (KERNEL_CONF_STACKSIZE_DEFAULT)
-#define GTSP_CYCLIC_STACK_SIZE (KERNEL_CONF_STACKSIZE_DEFAULT)
+#define GTSP_BEACON_STACK_SIZE (KERNEL_CONF_STACKSIZE_MAIN)
+#define GTSP_CYCLIC_STACK_SIZE (KERNEL_CONF_STACKSIZE_MAIN)
 #define GTSP_BEACON_BUFFER_SIZE (64)
 
 // prototypes for threads
@@ -91,7 +93,6 @@ static gtsp_sync_point_t gtsp_neighbor_table[GTSP_MAX_NEIGHBORS] =
 
 mutex_t gtsp_mutex;
 
-
 void gtsp_init(void)
 {
     mutex_init(&gtsp_mutex);
@@ -109,7 +110,6 @@ void gtsp_init(void)
     cyclic_driver_pid = thread_create(gtsp_cyclic_stack, GTSP_CYCLIC_STACK_SIZE,
     PRIORITY_MAIN - 2,
     CREATE_STACKTEST, cyclic_driver_thread, NULL, "gtsp_cyclic_driver");
-
     puts("GTSP initialized");
 }
 
@@ -265,6 +265,17 @@ void gtsp_mac_read(uint8_t *frame_payload, uint16_t src, gtimer_timeval_t *toa)
     }
 
     int64_t offset = (int64_t) gtsp_beacon.global - (int64_t) toa->global;
+#if GTSP_SANE_OFFSET_CHECK
+    if (offset > GTSP_SANE_OFFSET_THRESHOLD
+            || offset < -GTSP_SANE_OFFSET_THRESHOLD)
+    {
+        puts("gtsp_mac_read: offset calculation yielded abnormal high value");
+        puts("gtsp_mac_read: skipping offending beacon");
+        memset(sync_point, 0, sizeof(gtsp_sync_point_t));
+        mutex_unlock(&gtsp_mutex);
+        return;
+    }
+#endif /* GTSP_SANE_OFFSET_CHECK */
 
     // store the received and calculated data in the sync point
     sync_point->local_local = toa->local;
@@ -317,9 +328,9 @@ void gtsp_resume(void)
         GTSP_CYCLIC_STACK_SIZE,
         PRIORITY_MAIN - 2,
         CREATE_STACKTEST, cyclic_driver_thread, NULL, "gtsp_cyclic_driver");
-    } DEBUG("GTSP enabled with calibration offset: %" PRIu32 "\n", transmission_delay);
+    }
 
-    DEBUG("GTSP enabled");
+    DEBUG("GTSP enabled with calibration offset: %" PRIu32 "\n", transmission_delay);
 }
 
 void gtsp_driver_timestamp(uint8_t *ieee802154_frame, uint8_t frame_length)

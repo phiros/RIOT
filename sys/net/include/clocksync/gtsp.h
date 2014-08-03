@@ -1,7 +1,7 @@
 /**
- * gtsp.h - Declarations and types for the Gradient Time Synchronization Protocol.
+ * The gradient time synchronization protocol.
  *
- * Copyright (C) 2014  Philipp Rosenkranz
+ * Copyright (C) 2014  Philipp Rosenkranz, Daniel Jentsch
  *
  * This file subject to the terms and conditions of the GNU Lesser General
  * Public License. See the file LICENSE in the top level directory for more
@@ -9,12 +9,12 @@
  */
 
 /**
- * @defgroup gtsp    GTSP - Gradient Time Synchronisation Protocol.
+ * @defgroup gtsp    GTSP (Gradient Time Synchronisation Protocol)
  * @ingroup  net
- * @brief    The Gradient Clock Synchronization Protocol is a decentralized clock
- *           synchronization protocol which tries to synchronize not only the
- *           clock values but also the clock rate of all nodes in a network.
- * @see      <a href="http://www.disco.ethz.ch/publications/ipsn09.pdf">
+ * The Gradient Clock Synchronization Protocol is a decentralized clock
+ * synchronization protocol which tries to synchronize not only the
+ * clock values but also the clock rate of all nodes in a network.
+ * @see      <a href="http://dl.acm.org/citation.cfm?id=1602171">
  *              Sommer et.al.: Gradient Clock Synchronization in Wireless Sensor Networks
  *           </a>
  * @{
