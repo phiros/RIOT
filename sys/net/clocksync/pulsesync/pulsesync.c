@@ -62,7 +62,7 @@
 #define PULSESYNC_ENTRY_THROWOUT_LIMIT (300) // if time sync error is bigger than this clear the table
 #define PULSESYNC_SANE_OFFSET_CHECK (1)
 #define PULSESYNC_SANE_OFFSET_THRESHOLD ((int64_t)3145 * 10 * 1000 * 1000 * 1000) // 1 year in us
-
+#define PULSESYNC_MAX_BEACON_FORWARD_DELAY (10 * 1000) // 10 ms (reduces collisions)
 // easy to read status flags
 #define PULSESYNC_OK (1)
 #define PULSESYNC_ERR (0)
@@ -74,7 +74,7 @@
 #define PULSESYNC_BEACON_BUFFER_SIZE (64)
 
 // threads
-static void *beacon_thread(void *arg);
+static void *root_beacon_thread(void *arg);
 static void *cyclic_driver_thread(void *arg);
 
 static void send_beacon(void);
@@ -119,9 +119,6 @@ void pulsesync_init(void)
     offset = 0;
     seq_num = 0;
 
-    beacon_pid = thread_create(pulsesync_beacon_stack, PULSESYNC_BEACON_STACK_SIZE,
-    PRIORITY_MAIN - 2, CREATE_STACKTEST, beacon_thread, NULL, "pulsesync_beacon");
-
     puts("PULSESYNC initialized");
 }
 
@@ -131,7 +128,29 @@ static void *beacon_thread(void *arg)
     while (1)
     {
         thread_sleep();
-        DEBUG("_pulsesync_beacon_thread locking mutex\n");
+        DEBUG("beacon_thread locking mutex\n");
+        mutex_lock(&pulsesync_mutex);
+        memset(pulsesync_beacon_buffer, 0, sizeof(pulsesync_beacon_t));
+        if (!pause_protocol)
+        {
+            uint32_t random_wait = (100
+                    + genrand_uint32() % PULSESYNC_MAX_BEACON_FORWARD_DELAY);
+            vtimer_usleep(random_wait);
+            send_beacon();
+        }
+        mutex_unlock(&pulsesync_mutex);
+        DEBUG("beacon_thread: mutex unlocked\n");
+    }
+    return NULL;
+}
+
+static void *root_beacon_thread(void *arg)
+{
+    (void) arg;
+    while (1)
+    {
+        thread_sleep();
+        DEBUG("root_beacon_thread locking mutex\n");
         mutex_lock(&pulsesync_mutex);
         memset(pulsesync_beacon_buffer, 0, sizeof(pulsesync_beacon_t));
         if (!pause_protocol)
@@ -139,7 +158,7 @@ static void *beacon_thread(void *arg)
             send_beacon();
         }
         mutex_unlock(&pulsesync_mutex);
-        DEBUG("_pulsesync_beacon_thread: mutex unlocked\n");
+        DEBUG("root_beacon_thread: mutex unlocked\n");
     }
     return NULL;
 }
@@ -147,16 +166,13 @@ static void *beacon_thread(void *arg)
 static void *cyclic_driver_thread(void *arg)
 {
     (void) arg;
-    genrand_init((uint32_t) node_id);
-    uint32_t random_wait = (100 + genrand_uint32() % PULSESYNC_BEACON_INTERVAL);
-    vtimer_usleep(random_wait);
 
     while (1)
     {
         vtimer_usleep(beacon_interval);
-        if (!pause_protocol)
+        if (!pause_protocol && node_id == PULSESYNC_PREFERRED_ROOT)
         {
-            DEBUG("_pulsesync_cyclic_driver_thread: waking sending thread up");
+            DEBUG("cyclic_driver_thread: waking sending thread up");
             thread_wakeup(beacon_pid);
         }
     }
@@ -165,13 +181,15 @@ static void *cyclic_driver_thread(void *arg)
 
 static void send_beacon(void)
 {
-    DEBUG("_pulsesync_send_beacon\n");
+    puts("_pulsesync_send_beacon\n");
     gtimer_timeval_t now;
-    pulsesync_beacon_t *pulsesync_beacon = (pulsesync_beacon_t *) pulsesync_beacon_buffer;
+    pulsesync_beacon_t *pulsesync_beacon =
+            (pulsesync_beacon_t *) pulsesync_beacon_buffer;
     gtimer_sync_now(&now);
     if ((root_id != 0xFFFF))
     {
-        if ((table_entries < PULSESYNC_ENTRY_SEND_LIMIT) && (root_id != node_id))
+        if ((table_entries < PULSESYNC_ENTRY_SEND_LIMIT)
+                && (root_id != node_id))
         {
             heart_beats++;
         }
@@ -179,7 +197,7 @@ static void send_beacon(void)
         {
             gtimer_sync_now(&now);
 #if PULSESYNC_SANE_OFFSET_CHECK
-            if(now.global > last_global + PULSESYNC_SANE_OFFSET_THRESHOLD)
+            if (now.global > last_global + PULSESYNC_SANE_OFFSET_THRESHOLD)
             {
                 puts("send_beacon: trying to send abnormal high value");
                 return;
@@ -192,8 +210,8 @@ static void send_beacon(void)
             pulsesync_beacon->root = root_id;
             pulsesync_beacon->seq_number = seq_num;
 
-            sixlowpan_mac_send_ieee802154_frame(0, NULL, 8, pulsesync_beacon_buffer,
-                    sizeof(pulsesync_beacon_t), 1);
+            sixlowpan_mac_send_ieee802154_frame(0, NULL, 8,
+                    pulsesync_beacon_buffer, sizeof(pulsesync_beacon_t), 1);
 
             heart_beats++;
 
@@ -203,13 +221,26 @@ static void send_beacon(void)
     }
 }
 
-void pulsesync_mac_read(uint8_t *frame_payload, uint16_t src, gtimer_timeval_t *toa)
+void pulsesync_mac_read(uint8_t *frame_payload, uint16_t src,
+        gtimer_timeval_t *toa)
 {
     (void) src;
-    DEBUG("pulsesync_mac_read");
+    puts("pulsesync_mac_read");
     pulsesync_beacon_t *beacon = (pulsesync_beacon_t *) frame_payload;
     mutex_lock(&pulsesync_mutex);
-    if (pause_protocol)
+    if (pause_protocol || node_id == PULSESYNC_PREFERRED_ROOT)
+    {
+        mutex_unlock(&pulsesync_mutex);
+        return;
+    }
+
+    if (src == 1 && node_id == 3)
+    {
+        mutex_unlock(&pulsesync_mutex);
+        return;
+    }
+
+    if (src < 3 && node_id == 4)
     {
         mutex_unlock(&pulsesync_mutex);
         return;
@@ -218,10 +249,11 @@ void pulsesync_mac_read(uint8_t *frame_payload, uint16_t src, gtimer_timeval_t *
 #if PULSESYNC_SANE_OFFSET_CHECK
     if (pulsesync_is_synced())
     {
-        if(offset > PULSESYNC_SANE_OFFSET_THRESHOLD
+        if (offset > PULSESYNC_SANE_OFFSET_THRESHOLD
                 || offset < -PULSESYNC_SANE_OFFSET_THRESHOLD)
         {
-            puts("pulsesync_mac_read: offset calculation yielded abnormal high value");
+            puts(
+                    "pulsesync_mac_read: offset calculation yielded abnormal high value");
             puts("pulsesync_mac_read: skipping offending beacon");
             mutex_unlock(&pulsesync_mutex);
             return;
@@ -230,7 +262,8 @@ void pulsesync_mac_read(uint8_t *frame_payload, uint16_t src, gtimer_timeval_t *
 #endif /* PULSESYNC_SANE_OFFSET_CHECK */
 
     if ((beacon->root < root_id)
-            && !((heart_beats < PULSESYNC_IGNORE_ROOT_MSG) && (root_id == node_id)))
+            && !((heart_beats < PULSESYNC_IGNORE_ROOT_MSG)
+                    && (root_id == node_id)))
     {
         root_id = beacon->root;
         seq_num = beacon->seq_number;
@@ -265,6 +298,9 @@ void pulsesync_mac_read(uint8_t *frame_payload, uint16_t src, gtimer_timeval_t *
     {
         gtimer_sync_set_relative_rate(rate - 1);
     }
+
+    thread_wakeup(beacon_pid);
+
     mutex_unlock(&pulsesync_mutex);
 }
 
@@ -301,13 +337,34 @@ void pulsesync_resume(void)
     heart_beats = 0;
     num_errors = 0;
 
+    genrand_init((uint32_t) node_id);
     pause_protocol = false;
-    if (cyclic_driver_pid == 0)
+
+    if (beacon_pid == 0)
+    {
+        if (node_id == PULSESYNC_PREFERRED_ROOT)
+        {
+            beacon_pid = thread_create(pulsesync_beacon_stack,
+            PULSESYNC_BEACON_STACK_SIZE,
+            PRIORITY_MAIN - 2, CREATE_STACKTEST, root_beacon_thread, NULL,
+                    "pulsesync_root_beacon");
+        }
+        else
+        {
+            beacon_pid = thread_create(pulsesync_beacon_stack,
+            PULSESYNC_BEACON_STACK_SIZE,
+            PRIORITY_MAIN - 2, CREATE_STACKTEST, beacon_thread, NULL,
+                    "pulsesync_beacon");
+        }
+    }
+
+    if (cyclic_driver_pid == 0 && node_id == PULSESYNC_PREFERRED_ROOT)
     {
         cyclic_driver_pid = thread_create(pulsesync_cyclic_stack,
         PULSESYNC_CYCLIC_STACK_SIZE,
         PRIORITY_MAIN - 2,
-        CREATE_STACKTEST, cyclic_driver_thread, NULL, "pulsesync_cyclic_driver");
+        CREATE_STACKTEST, cyclic_driver_thread, NULL,
+                "pulsesync_cyclic_driver");
     }
 }
 
