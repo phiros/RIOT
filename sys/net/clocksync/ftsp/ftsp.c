@@ -174,7 +174,7 @@ static void send_beacon(void)
     {
         if ((table_entries < FTSP_ENTRY_SEND_LIMIT) && (root_id != node_id))
         {
-            ++heart_beats;
+            heart_beats++;
         }
         else
         {
@@ -196,10 +196,10 @@ static void send_beacon(void)
             sixlowpan_mac_send_ieee802154_frame(0, NULL, 8, ftsp_beacon_buffer,
                     sizeof(ftsp_beacon_t), 1);
 
-            ++heart_beats;
+            heart_beats++;
 
             if (root_id == node_id)
-                ++seq_num;
+                seq_num++;
         }
     }
 }
@@ -429,7 +429,7 @@ static void add_new_entry(ftsp_beacon_t *beacon, gtimer_timeval_t *toa)
     }
 
     int del_because_old = 0;
-    for (uint8_t i = 0; i < FTSP_MAX_ENTRIES; ++i)
+    for (uint8_t i = 0; i < FTSP_MAX_ENTRIES; i++)
     {
         if (table[i].local < limit_age)
         {
@@ -440,7 +440,7 @@ static void add_new_entry(ftsp_beacon_t *beacon, gtimer_timeval_t *toa)
         if (table[i].state == FTSP_ENTRY_EMPTY)
             free_item = i;
         else
-            ++table_entries;
+            table_entries++;
 
         if (oldest_time > table[i].local)
         {
@@ -452,7 +452,7 @@ static void add_new_entry(ftsp_beacon_t *beacon, gtimer_timeval_t *toa)
     if (free_item < 0)
         free_item = oldest_item;
     else
-        ++table_entries;
+        table_entries++;
 
     table[free_item].state = FTSP_ENTRY_FULL;
     table[free_item].local = toa->local;
@@ -467,7 +467,7 @@ static void add_new_entry(ftsp_beacon_t *beacon, gtimer_timeval_t *toa)
 
 static void clear_table(void)
 {
-    for (uint8_t i = 0; i < FTSP_MAX_ENTRIES; ++i)
+    for (uint8_t i = 0; i < FTSP_MAX_ENTRIES; i++)
         table[i].state = FTSP_ENTRY_EMPTY;
 
     table_entries = 0;
