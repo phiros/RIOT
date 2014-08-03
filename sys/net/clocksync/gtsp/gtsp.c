@@ -33,7 +33,7 @@
 #include "sixlowpan/dispatch_values.h"
 
 #ifdef MODULE_CC110X_NG
-#define GTSP_CALIBRATION_OFFSET ((uint32_t) 2300)
+#define GTSP_CALIBRATION_OFFSET ((uint32_t) 2220)
 
 #elif MODULE_NATIVENET
 #define GTSP_CALIBRATION_OFFSET ((uint32_t) 1500)
@@ -110,7 +110,6 @@ void gtsp_init(void)
     cyclic_driver_pid = thread_create(gtsp_cyclic_stack, GTSP_CYCLIC_STACK_SIZE,
     PRIORITY_MAIN - 2,
     CREATE_STACKTEST, cyclic_driver_thread, NULL, "gtsp_cyclic_driver");
-
     puts("GTSP initialized");
 }
 
