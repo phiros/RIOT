@@ -173,11 +173,11 @@ void pulsesync_mac_read(uint8_t *frame_payload, uint16_t src,
 {
     DEBUG("pulsesync_mac_read: pulsesync_mac_read");
     mutex_lock(&pulsesync_mutex);
-    pulsesync_beacon_t gtsp_beacon;
+    pulsesync_beacon_t pulsesync_beacon;
 
     // copy beacon into local buffer
-    memcpy(&gtsp_beacon, frame_payload, sizeof(gtsp_beacon_t));
-    pulsesync_beacon_t *beacon = &gtsp_beacon;
+    memcpy(&pulsesync_beacon, frame_payload, sizeof(gtsp_beacon_t));
+    pulsesync_beacon_t *beacon = &pulsesync_beacon;
 
     if (pause_protocol || node_id == PULSESYNC_PREFERRED_ROOT)
     {

@@ -61,8 +61,7 @@
 #define FTSP_IGNORE_ROOT_MSG (4) // after becoming the root ignore other roots messages (in send period)
 #define FTSP_ENTRY_THROWOUT_LIMIT (300) // if time sync error is bigger than this clear the table
 #define FTSP_SANE_OFFSET_CHECK (1)
-#define FTSP_SANE_OFFSET_SYNCED_THRESHOLD ((int64_t)1 * 1000 * 1000) // 1 second
-#define FTSP_SANE_OFFSET_UNSYNCED_THRESHOLD ((int64_t)3145 * 10 * 1000 * 1000 * 1000) // 1 year in us
+#define FTSP_SANE_OFFSET_THRESHOLD ((int64_t)3145 * 10 * 1000 * 1000 * 1000) // 1 year in us
 
 // easy to read status flags
 #define FTSP_OK (1)
@@ -70,8 +69,8 @@
 #define FTSP_ENTRY_EMPTY (0)
 #define FTSP_ENTRY_FULL (1)
 
-#define FTSP_BEACON_STACK_SIZE (KERNEL_CONF_STACKSIZE_MAIN)
-#define FTSP_CYCLIC_STACK_SIZE (KERNEL_CONF_STACKSIZE_MAIN)
+#define FTSP_BEACON_STACK_SIZE (KERNEL_CONF_STACKSIZE_PRINTF_FLOAT)
+#define FTSP_CYCLIC_STACK_SIZE (KERNEL_CONF_STACKSIZE_PRINTF_FLOAT)
 #define FTSP_BEACON_BUFFER_SIZE (64)
 
 // threads
@@ -93,10 +92,13 @@ static uint32_t transmission_delay = FTSP_CALIBRATION_OFFSET;
 static bool pause_protocol = true;
 static uint16_t root_id = UINT16_MAX;
 static uint16_t node_id = 0;
-static uint8_t table_entries, num_errors, seq_num;
+static uint8_t table_entries, heart_beats, num_errors, seq_num;
 static int64_t offset;
 static float rate;
 ftsp_table_item_t table[FTSP_MAX_ENTRIES];
+#ifdef FTSP_SANE_OFFSET_CHECK
+static uint64_t last_global = 0;
+#endif
 
 static char ftsp_beacon_stack[FTSP_BEACON_STACK_SIZE];
 static char ftsp_cyclic_stack[FTSP_CYCLIC_STACK_SIZE];
@@ -111,6 +113,7 @@ void ftsp_init(void)
 
     rate = 1.0;
     clear_table();
+    heart_beats = 0;
     num_errors = 0;
     table_entries = 0;
     offset = 0;
@@ -128,7 +131,7 @@ static void *beacon_thread(void *arg)
     while (1)
     {
         thread_sleep();
-        DEBUG("beacon_thread locking mutex\n");
+        DEBUG("_ftsp_beacon_thread locking mutex\n");
         mutex_lock(&ftsp_mutex);
         memset(ftsp_beacon_buffer, 0, sizeof(ftsp_beacon_t));
         if (!pause_protocol)
@@ -136,7 +139,7 @@ static void *beacon_thread(void *arg)
             send_beacon();
         }
         mutex_unlock(&ftsp_mutex);
-        DEBUG("beacon_thread: mutex unlocked\n");
+        DEBUG("_ftsp_beacon_thread: mutex unlocked\n");
     }
     return NULL;
 }
@@ -153,7 +156,7 @@ static void *cyclic_driver_thread(void *arg)
         vtimer_usleep(beacon_interval);
         if (!pause_protocol)
         {
-            DEBUG("cyclic_driver_thread: waking sending thread up");
+            DEBUG("_ftsp_cyclic_driver_thread: waking sending thread up");
             thread_wakeup(beacon_pid);
         }
     }
@@ -166,22 +169,37 @@ static void send_beacon(void)
     gtimer_timeval_t now;
     ftsp_beacon_t *ftsp_beacon = (ftsp_beacon_t *) ftsp_beacon_buffer;
     gtimer_sync_now(&now);
-
-    if (node_id == FTSP_PREFERRED_ROOT)
-        seq_num++;
-
-    if ((table_entries > FTSP_ENTRY_SEND_LIMIT)
-            || (node_id == FTSP_PREFERRED_ROOT))
+    if ((root_id != 0xFFFF))
     {
-        gtimer_sync_now(&now);
-        ftsp_beacon->dispatch_marker = FTSP_PROTOCOL_DISPATCH;
-        ftsp_beacon->id = node_id;
-        ftsp_beacon->global = now.global + transmission_delay;
-        ftsp_beacon->root = root_id;
-        ftsp_beacon->seq_number = seq_num;
+        if ((table_entries < FTSP_ENTRY_SEND_LIMIT) && (root_id != node_id))
+        {
+            heart_beats++;
+        }
+        else
+        {
+            gtimer_sync_now(&now);
+#if FTSP_SANE_OFFSET_CHECK
+            if(now.global > last_global + FTSP_SANE_OFFSET_THRESHOLD)
+            {
+                puts("send_beacon: trying to send abnormal high value");
+                return;
+            }
+            last_global = now.global;
+#endif
+            ftsp_beacon->dispatch_marker = FTSP_PROTOCOL_DISPATCH;
+            ftsp_beacon->id = node_id;
+            ftsp_beacon->global = now.global + transmission_delay;
+            ftsp_beacon->root = root_id;
+            ftsp_beacon->seq_number = seq_num;
 
-        sixlowpan_mac_send_ieee802154_frame(0, NULL, 8, ftsp_beacon_buffer,
-                sizeof(ftsp_beacon_t), 1);
+            sixlowpan_mac_send_ieee802154_frame(0, NULL, 8, ftsp_beacon_buffer,
+                    sizeof(ftsp_beacon_t), 1);
+
+            heart_beats++;
+
+            if (root_id == node_id)
+                seq_num++;
+        }
     }
 }
 
@@ -191,52 +209,56 @@ void ftsp_mac_read(uint8_t *frame_payload, uint16_t src, gtimer_timeval_t *toa)
     DEBUG("ftsp_mac_read");
     ftsp_beacon_t *beacon = (ftsp_beacon_t *) frame_payload;
     mutex_lock(&ftsp_mutex);
-    if (pause_protocol || node_id == FTSP_PREFERRED_ROOT)
+    if (pause_protocol)
     {
         mutex_unlock(&ftsp_mutex);
         return;
     }
 
-    if (beacon->seq_number > seq_num)
+#if FTSP_SANE_OFFSET_CHECK
+    if (ftsp_is_synced())
     {
+        if(offset > FTSP_SANE_OFFSET_THRESHOLD
+                || offset < -FTSP_SANE_OFFSET_THRESHOLD)
+        {
+            puts("ftsp_mac_read: offset calculation yielded abnormal high value");
+            puts("ftsp_mac_read: skipping offending beacon");
+            mutex_unlock(&ftsp_mutex);
+            return;
+        }
+    }
+#endif /* FTSP_SANE_OFFSET_CHECK */
+
+    if ((beacon->root < root_id)
+            && !((heart_beats < FTSP_IGNORE_ROOT_MSG) && (root_id == node_id)))
+    {
+        root_id = beacon->root;
         seq_num = beacon->seq_number;
     }
     else
     {
-        mutex_unlock(&ftsp_mutex);
-        return;
+        if ((root_id == beacon->root)
+                && ((int8_t) (beacon->seq_number - seq_num) > 0))
+        {
+            seq_num = beacon->seq_number;
+        }
+        else
+        {
+            DEBUG(
+                    "not (beacon->root < _ftsp_root_id) [...] and not (_ftsp_root_id == beacon->root)");
+            mutex_unlock(&ftsp_mutex);
+            return;
+        }
     }
+
+    if (root_id < node_id)
+        heart_beats = 0;
 
     add_new_entry(beacon, toa);
     linear_regression();
     int64_t est_global = offset + ((int64_t) toa->local) * (rate);
     int64_t offset_global = est_global - (int64_t) toa->global;
     offset = offset_global;
-
-#if FTSP_SANE_OFFSET_CHECK
-    if (ftsp_is_synced())
-    {
-        if (offset > FTSP_SANE_OFFSET_SYNCED_THRESHOLD
-                || offset < -FTSP_SANE_OFFSET_SYNCED_THRESHOLD)
-        {
-            puts("ftsp_mac_read: synced and offset to large ->clear table");
-            clear_table();
-            mutex_unlock(&ftsp_mutex);
-            return;
-        }
-    }
-    else
-    {
-        if (offset > FTSP_SANE_OFFSET_UNSYNCED_THRESHOLD
-                || offset < -FTSP_SANE_OFFSET_UNSYNCED_THRESHOLD)
-        {
-            puts("ftsp_mac_read: not synced and offset to large ->clear table");
-            clear_table();
-            mutex_unlock(&ftsp_mutex);
-            return;
-        }
-    }
-#endif /* FTSP_SANE_OFFSET_CHECK */
 
     gtimer_sync_set_global_offset(offset_global);
     if (table_entries >= FTSP_RATE_CALC_THRESHOLD)
@@ -266,9 +288,17 @@ void ftsp_resume(void)
 {
     DEBUG("ftsp: resume");
     node_id = get_transceiver_addr();
-    node_id = FTSP_PREFERRED_ROOT;
+    if (node_id == FTSP_PREFERRED_ROOT)
+    {
+        root_id = node_id;
+    }
+    else
+    {
+        root_id = 0xFFFF;
+    }
     rate = 1.0;
     clear_table();
+    heart_beats = 0;
     num_errors = 0;
 
     pause_protocol = false;
@@ -291,6 +321,13 @@ void ftsp_driver_timestamp(uint8_t *ieee802154_frame, uint8_t frame_length)
                 frame_length);
         ftsp_beacon_t *beacon = (ftsp_beacon_t *) frame.payload;
         gtimer_sync_now(&now);
+#if FTSP_SANE_OFFSET_CHECK
+        if (now.global > last_global + FTSP_SANE_OFFSET_THRESHOLD)
+        {
+            puts("send_beacon: trying to send abnormal high value");
+            return;
+        }
+#endif
         beacon->global = now.global + transmission_delay;
         memcpy(ieee802154_frame + hdrlen, beacon, sizeof(ftsp_beacon_t));
     }
@@ -404,12 +441,6 @@ static void add_new_entry(ftsp_beacon_t *beacon, gtimer_timeval_t *toa)
     table[free_item].state = FTSP_ENTRY_FULL;
     table[free_item].local = toa->local;
     table[free_item].global = beacon->global;
-#ifdef DEBUG_ENABLED
-    DEBUG("free_item: %"PRId8 " ", free_item);
-    DEBUG("oldest_item: %"PRIu8 " ", oldest_item);
-    DEBUG("table_entries: %"PRIu8 " ", table_entries);
-    DEBUG("del_because_old: %d\n", del_because_old);
-#endif
 }
 
 static void clear_table(void)
