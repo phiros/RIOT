@@ -37,6 +37,7 @@ class ClocksyncEvalLogAnalyzer():
         self.heartbeatDict = dict()
         self.localErrorMaxAvg = dict()
         self.localError = dict()
+        self.localErrorAvg = dict()
         self.logdir = logdir
         self.minBackboneTime = sys.maxint
         self.maxBackboneTime = 0
@@ -93,6 +94,8 @@ class ClocksyncEvalLogAnalyzer():
         od = collections.OrderedDict(sorted(self.localErrorMaxAvg.items()))
         self.localErrorMaxAvg = od
         self.scaleGlobalErrorTime()
+        od = collections.OrderedDict(sorted(self.localErrorAvg.items()))
+        self.localErrorAvg = od
         od = collections.OrderedDict(sorted(self.maxGlobalError.items()))
         self.maxGlobalError = od
         od = collections.OrderedDict(sorted(self.heartbeatDict.items()))
@@ -309,8 +312,11 @@ class ClocksyncEvalLogAnalyzer():
     def triggerToMaxLocalError(self):
         bucketsize = 10 # -> 0.1 ms buckets
         for (recv1, recv2) in self.adjDict.iterkeys():
+            # Inspect every connection only once
+            if recv1 < recv2:
+                continue
             # ignore all nodes with a weaker connection than 80%
-            if self.adjDict[recv1, recv2] < 0.8:
+            if self.adjDict[recv1, recv2] < 0.8 or self.adjDict.get((recv2, recv1), 0) < 0.8:
                 continue
             if not self.triggerDict.has_key(recv1):
                 print "No trigger for " + recv1 + " found"
@@ -339,6 +345,10 @@ class ClocksyncEvalLogAnalyzer():
                     error = abs(global1 - global2)
                     if self.localErrorMaxAvg.get(timeBucket, -1000) < error:
                         self.localErrorMaxAvg[timeBucket] = error
+
+                    summe, count = self.localErrorAvg.get(timeBucket, (0, 0))
+                    self.localErrorAvg[timeBucket] = summe + error, count + 1
+
                     self.localError[meanServer] = error
 
             if trigger < (self.sendedTrigger / 2):
