@@ -61,7 +61,8 @@
 #define FTSP_IGNORE_ROOT_MSG (4) // after becoming the root ignore other roots messages (in send period)
 #define FTSP_ENTRY_THROWOUT_LIMIT (300) // if time sync error is bigger than this clear the table
 #define FTSP_SANE_OFFSET_CHECK (1)
-#define FTSP_SANE_OFFSET_THRESHOLD ((int64_t)60 * 1000 * 1000) // 1 min in us
+#define FTSP_SANE_SYNC_OFFSET_THRESHOLD ((int64_t)1 * 1000 * 1000) // 1 min in us
+#define FTSP_SANE_USYNC_OFFSET_THRESHOLD ((int64_t)31536 * 1000 * 1000 * 1000) // 1 year in us
 
 // easy to read status flags
 #define FTSP_OK (1)
@@ -182,7 +183,7 @@ static void send_beacon(void)
         {
             gtimer_sync_now(&now);
 #if FTSP_SANE_OFFSET_CHECK
-            if(now.global > last_global + FTSP_SANE_OFFSET_THRESHOLD)
+            if (now.global > last_global + FTSP_SANE_USYNC_OFFSET_THRESHOLD)
             {
                 DEBUG("send_beacon: trying to send abnormal high value");
                 return;
@@ -240,20 +241,6 @@ void ftsp_mac_read(uint8_t *frame_payload, uint16_t src, gtimer_timeval_t *toa)
         }
     }
 
-#if FTSP_SANE_OFFSET_CHECK
-    if (ftsp_is_synced())
-    {
-        if(offset > FTSP_SANE_OFFSET_THRESHOLD
-                || offset < -FTSP_SANE_OFFSET_THRESHOLD)
-        {
-            DEBUG("ftsp_mac_read: offset calculation yielded abnormal high value");
-            DEBUG("ftsp_mac_read: skipping offending beacon");
-            mutex_unlock(&ftsp_mutex);
-            return;
-        }
-    }
-#endif /* FTSP_SANE_OFFSET_CHECK */
-
     if (root_id < node_id)
         heart_beats = 0;
 
@@ -265,8 +252,21 @@ void ftsp_mac_read(uint8_t *frame_payload, uint16_t src, gtimer_timeval_t *toa)
 #if FTSP_SANE_OFFSET_CHECK
     if (ftsp_is_synced())
     {
-        if(offset_global > FTSP_SANE_OFFSET_THRESHOLD
-                || offset_global < -FTSP_SANE_OFFSET_THRESHOLD)
+        if (offset_global > FTSP_SANE_SYNC_OFFSET_THRESHOLD
+                || offset_global < -FTSP_SANE_SYNC_OFFSET_THRESHOLD)
+        {
+            DEBUG("ftsp_mac_read: offset calculation yielded abnormal high value");
+            DEBUG("ftsp_mac_read: skipping offending beacon");
+            remove_last_entry();
+            num_errors++;
+            mutex_unlock(&ftsp_mutex);
+            return;
+        }
+    }
+    else
+    {
+        if (offset_global > FTSP_SANE_USYNC_OFFSET_THRESHOLD
+                || offset_global < -FTSP_SANE_USYNC_OFFSET_THRESHOLD)
         {
             DEBUG("ftsp_mac_read: offset calculation yielded abnormal high value");
             DEBUG("ftsp_mac_read: skipping offending beacon");
@@ -342,7 +342,7 @@ void ftsp_driver_timestamp(uint8_t *ieee802154_frame, uint8_t frame_length)
         ftsp_beacon_t *beacon = (ftsp_beacon_t *) frame.payload;
         gtimer_sync_now(&now);
 #if FTSP_SANE_OFFSET_CHECK
-        if (now.global > last_global + FTSP_SANE_OFFSET_THRESHOLD)
+        if (now.global > last_global + FTSP_SANE_USYNC_OFFSET_THRESHOLD)
         {
             DEBUG("send_beacon: trying to send abnormal high value");
             return;
@@ -470,18 +470,19 @@ static void remove_last_entry(void)
 
     for (uint8_t i = 0; i < FTSP_MAX_ENTRIES; i++)
     {
-        if (table[i].state = FTSP_ENTRY_EMPTY && newest_age < table[i].local)
+        if (table[i].state == FTSP_ENTRY_FULL && newest_age < table[i].local)
         {
-            newest_time = table[i].local;
+            newest_age = table[i].local;
             newest_item = i;
         }
     }
 
     // table was empty, nothing to do
-    if (newest_item = -1)
+    if (newest_item == -1)
         return;
 
-    table[newest_item].state = FTSP_ENTRY_FULL;
+    table[newest_item].state = FTSP_ENTRY_EMPTY;
+    table_entries--;
 }
 
 static void clear_table(void)
