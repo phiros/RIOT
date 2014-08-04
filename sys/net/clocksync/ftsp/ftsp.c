@@ -181,7 +181,7 @@ static void send_beacon(void)
 #if FTSP_SANE_OFFSET_CHECK
             if(now.global > last_global + FTSP_SANE_OFFSET_THRESHOLD)
             {
-                puts("send_beacon: trying to send abnormal high value");
+                DEBUG("send_beacon: trying to send abnormal high value");
                 return;
             }
             last_global = now.global;
@@ -221,8 +221,8 @@ void ftsp_mac_read(uint8_t *frame_payload, uint16_t src, gtimer_timeval_t *toa)
         if(offset > FTSP_SANE_OFFSET_THRESHOLD
                 || offset < -FTSP_SANE_OFFSET_THRESHOLD)
         {
-            puts("ftsp_mac_read: offset calculation yielded abnormal high value");
-            puts("ftsp_mac_read: skipping offending beacon");
+            DEBUG("ftsp_mac_read: offset calculation yielded abnormal high value");
+            DEBUG("ftsp_mac_read: skipping offending beacon");
             mutex_unlock(&ftsp_mutex);
             return;
         }
@@ -324,7 +324,7 @@ void ftsp_driver_timestamp(uint8_t *ieee802154_frame, uint8_t frame_length)
 #if FTSP_SANE_OFFSET_CHECK
         if (now.global > last_global + FTSP_SANE_OFFSET_THRESHOLD)
         {
-            puts("send_beacon: trying to send abnormal high value");
+            DEBUG("send_beacon: trying to send abnormal high value");
             return;
         }
 #endif
@@ -398,7 +398,7 @@ static void add_new_entry(ftsp_beacon_t *beacon, gtimer_timeval_t *toa)
             DEBUG("ftsp: error large; new root elected?\n");
             if (++num_errors > 3)
             {
-                puts("ftsp: number of errors to high clearing table\n");
+                DEBUG("ftsp: number of errors to high clearing table\n");
                 clear_table();
             }
         }
@@ -459,7 +459,7 @@ static uint16_t get_transceiver_addr(void)
 
     if (transceiver_pid < 0)
     {
-        puts("Transceiver not initialized");
+        puts("ftsp: Transceiver not initialized");
         return 1;
     }
 
