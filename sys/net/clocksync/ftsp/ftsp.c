@@ -81,6 +81,9 @@ static void send_beacon(void);
 static void linear_regression(void);
 static void clear_table(void);
 static void add_new_entry(ftsp_beacon_t *beacon, gtimer_timeval_t *toa);
+// Removes the oldest not free entry of the table
+// If the table is empty, nothing happens
+static void remove_last_entry(void);
 static uint16_t get_transceiver_addr(void);
 
 static int beacon_pid = 0;
@@ -215,20 +218,6 @@ void ftsp_mac_read(uint8_t *frame_payload, uint16_t src, gtimer_timeval_t *toa)
         return;
     }
 
-#if FTSP_SANE_OFFSET_CHECK
-    if (ftsp_is_synced())
-    {
-        if(offset > FTSP_SANE_OFFSET_THRESHOLD
-                || offset < -FTSP_SANE_OFFSET_THRESHOLD)
-        {
-            DEBUG("ftsp_mac_read: offset calculation yielded abnormal high value");
-            DEBUG("ftsp_mac_read: skipping offending beacon");
-            mutex_unlock(&ftsp_mutex);
-            return;
-        }
-    }
-#endif /* FTSP_SANE_OFFSET_CHECK */
-
     if ((beacon->root < root_id)
             && !((heart_beats < FTSP_IGNORE_ROOT_MSG) && (root_id == node_id)))
     {
@@ -250,6 +239,20 @@ void ftsp_mac_read(uint8_t *frame_payload, uint16_t src, gtimer_timeval_t *toa)
             return;
         }
     }
+
+#if FTSP_SANE_OFFSET_CHECK
+    if (ftsp_is_synced())
+    {
+        if(offset > FTSP_SANE_OFFSET_THRESHOLD
+                || offset < -FTSP_SANE_OFFSET_THRESHOLD)
+        {
+            DEBUG("ftsp_mac_read: offset calculation yielded abnormal high value");
+            DEBUG("ftsp_mac_read: skipping offending beacon");
+            mutex_unlock(&ftsp_mutex);
+            return;
+        }
+    }
+#endif /* FTSP_SANE_OFFSET_CHECK */
 
     if (root_id < node_id)
         heart_beats = 0;
@@ -441,6 +444,27 @@ static void add_new_entry(ftsp_beacon_t *beacon, gtimer_timeval_t *toa)
     table[free_item].state = FTSP_ENTRY_FULL;
     table[free_item].local = toa->local;
     table[free_item].global = beacon->global;
+}
+
+static void remove_last_entry(void)
+{
+    int8_t newest_item = -1;
+    uint64_t newest_age = 0;
+
+    for (uint8_t i = 0; i < FTSP_MAX_ENTRIES; i++)
+    {
+        if (table[i].state = FTSP_ENTRY_EMPTY && newest_age < table[i].local)
+        {
+            newest_time = table[i].local;
+            newest_item = i;
+        }
+    }
+
+    // table was empty, nothing to do
+    if (newest_item = -1)
+        return;
+
+    table[newest_item].state = FTSP_ENTRY_FULL;
 }
 
 static void clear_table(void)
