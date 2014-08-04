@@ -61,7 +61,8 @@
 #define PULSESYNC_IGNORE_ROOT_MSG (4) // after becoming the root ignore other roots messages (in send period)
 #define PULSESYNC_ENTRY_THROWOUT_LIMIT (300) // if time sync error is bigger than this clear the table
 #define PULSESYNC_SANE_OFFSET_CHECK (1)
-#define PULSESYNC_SANE_OFFSET_THRESHOLD ((int64_t)3145 * 10 * 1000 * 1000 * 1000) // 1 year in us
+#define PULSESYNC_SANE_SYNC_OFFSET_THRESHOLD ((int64_t)1 * 1000 * 1000) // 1 min in us
+#define PULSESYNC_SANE_USYNC_OFFSET_THRESHOLD ((int64_t)31536 * 1000 * 1000 * 1000) // 1 year in us
 #define PULSESYNC_MAX_BEACON_FORWARD_DELAY (10 * 1000) // 10 ms (reduces collisions)
 // easy to read status flags
 #define PULSESYNC_OK (1)
@@ -81,6 +82,9 @@ static void send_beacon(void);
 static void linear_regression(void);
 static void clear_table(void);
 static void add_new_entry(pulsesync_beacon_t *beacon, gtimer_timeval_t *toa);
+// Removes the oldest not free entry of the table
+// If the table is empty, nothing happens
+static void remove_last_entry(void);
 static uint16_t get_transceiver_addr(void);
 
 static int beacon_pid = 0;
@@ -197,7 +201,7 @@ static void send_beacon(void)
         {
             gtimer_sync_now(&now);
 #if PULSESYNC_SANE_OFFSET_CHECK
-            if (now.global > last_global + PULSESYNC_SANE_OFFSET_THRESHOLD)
+            if (now.global > last_global + PULSESYNC_SANE_USYNC_OFFSET_THRESHOLD)
             {
                 DEBUG("send_beacon: trying to send abnormal high value");
                 return;
@@ -234,21 +238,6 @@ void pulsesync_mac_read(uint8_t *frame_payload, uint16_t src,
         return;
     }
 
-#if PULSESYNC_SANE_OFFSET_CHECK
-    if (pulsesync_is_synced())
-    {
-        if (offset > PULSESYNC_SANE_OFFSET_THRESHOLD
-                || offset < -PULSESYNC_SANE_OFFSET_THRESHOLD)
-        {
-            DEBUG(
-                    "pulsesync_mac_read: offset calculation yielded abnormal high value");
-            DEBUG("pulsesync_mac_read: skipping offending beacon");
-            mutex_unlock(&pulsesync_mutex);
-            return;
-        }
-    }
-#endif /* PULSESYNC_SANE_OFFSET_CHECK */
-
     if ((beacon->root < root_id)
             && !((heart_beats < PULSESYNC_IGNORE_ROOT_MSG)
                     && (root_id == node_id)))
@@ -279,6 +268,36 @@ void pulsesync_mac_read(uint8_t *frame_payload, uint16_t src,
     linear_regression();
     int64_t est_global = offset + ((int64_t) toa->local) * (rate);
     int64_t offset_global = est_global - (int64_t) toa->global;
+
+#if PULSESYNC_SANE_OFFSET_CHECK
+    if (pulsesync_is_synced())
+    {
+        if (offset_global > PULSESYNC_SANE_SYNC_OFFSET_THRESHOLD
+                || offset_global < -PULSESYNC_SANE_SYNC_OFFSET_THRESHOLD)
+        {
+            DEBUG("ftsp_mac_read: offset calculation yielded abnormal high value");
+            DEBUG("ftsp_mac_read: skipping offending beacon");
+            remove_last_entry();
+            num_errors++;
+            mutex_unlock(&pulsesync_mutex);
+            return;
+        }
+    }
+    else
+    {
+        if (offset_global > PULSESYNC_SANE_USYNC_OFFSET_THRESHOLD
+                || offset_global < -PULSESYNC_SANE_USYNC_OFFSET_THRESHOLD)
+        {
+            DEBUG("ftsp_mac_read: offset calculation yielded abnormal high value");
+            DEBUG("ftsp_mac_read: skipping offending beacon");
+            remove_last_entry();
+            num_errors++;
+            mutex_unlock(&pulsesync_mutex);
+            return;
+        }
+    }
+#endif /* FTSP_SANE_OFFSET_CHECK */
+
     offset = offset_global;
 
     gtimer_sync_set_global_offset(offset_global);
@@ -367,7 +386,7 @@ void pulsesync_driver_timestamp(uint8_t *ieee802154_frame, uint8_t frame_length)
         pulsesync_beacon_t *beacon = (pulsesync_beacon_t *) frame.payload;
         gtimer_sync_now(&now);
 #if PULSESYNC_SANE_OFFSET_CHECK
-        if (now.global > last_global + PULSESYNC_SANE_OFFSET_THRESHOLD)
+        if (now.global > last_global + PULSESYNC_SANE_USYNC_OFFSET_THRESHOLD)
         {
             DEBUG("send_beacon: trying to send abnormal high value");
             return;
@@ -486,6 +505,28 @@ static void add_new_entry(pulsesync_beacon_t *beacon, gtimer_timeval_t *toa)
     table[free_item].state = PULSESYNC_ENTRY_FULL;
     table[free_item].local = toa->local;
     table[free_item].global = beacon->global;
+}
+
+static void remove_last_entry(void)
+{
+    int8_t newest_item = -1;
+    uint64_t newest_age = 0;
+
+    for (uint8_t i = 0; i < PULSESYNC_MAX_ENTRIES; i++)
+    {
+        if (table[i].state == PULSESYNC_ENTRY_FULL && newest_age < table[i].local)
+        {
+            newest_age = table[i].local;
+            newest_item = i;
+        }
+    }
+
+    // table was empty, nothing to do
+    if (newest_item == -1)
+        return;
+
+    table[newest_item].state = PULSESYNC_ENTRY_EMPTY;
+    table_entries--;
 }
 
 static void clear_table(void)
