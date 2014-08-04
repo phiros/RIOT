@@ -61,7 +61,7 @@
 #define FTSP_IGNORE_ROOT_MSG (4) // after becoming the root ignore other roots messages (in send period)
 #define FTSP_ENTRY_THROWOUT_LIMIT (300) // if time sync error is bigger than this clear the table
 #define FTSP_SANE_OFFSET_CHECK (1)
-#define FTSP_SANE_OFFSET_THRESHOLD ((int64_t)3145 * 10 * 1000 * 1000 * 1000) // 1 year in us
+#define FTSP_SANE_OFFSET_THRESHOLD ((int64_t)60 * 1000 * 1000) // 1 min in us
 
 // easy to read status flags
 #define FTSP_OK (1)
@@ -215,20 +215,6 @@ void ftsp_mac_read(uint8_t *frame_payload, uint16_t src, gtimer_timeval_t *toa)
         return;
     }
 
-#if FTSP_SANE_OFFSET_CHECK
-    if (ftsp_is_synced())
-    {
-        if(offset > FTSP_SANE_OFFSET_THRESHOLD
-                || offset < -FTSP_SANE_OFFSET_THRESHOLD)
-        {
-            DEBUG("ftsp_mac_read: offset calculation yielded abnormal high value");
-            DEBUG("ftsp_mac_read: skipping offending beacon");
-            mutex_unlock(&ftsp_mutex);
-            return;
-        }
-    }
-#endif /* FTSP_SANE_OFFSET_CHECK */
-
     if ((beacon->root < root_id)
             && !((heart_beats < FTSP_IGNORE_ROOT_MSG) && (root_id == node_id)))
     {
@@ -258,6 +244,23 @@ void ftsp_mac_read(uint8_t *frame_payload, uint16_t src, gtimer_timeval_t *toa)
     linear_regression();
     int64_t est_global = offset + ((int64_t) toa->local) * (rate);
     int64_t offset_global = est_global - (int64_t) toa->global;
+
+#if FTSP_SANE_OFFSET_CHECK
+    if (ftsp_is_synced())
+    {
+        if(offset_global > FTSP_SANE_OFFSET_THRESHOLD
+                || offset_global < -FTSP_SANE_OFFSET_THRESHOLD)
+        {
+            DEBUG("ftsp_mac_read: offset calculation yielded abnormal high value");
+            DEBUG("ftsp_mac_read: skipping offending beacon");
+            remove_last_entry();
+            num_errors++;
+            mutex_unlock(&ftsp_mutex);
+            return;
+        }
+    }
+#endif /* FTSP_SANE_OFFSET_CHECK */
+
     offset = offset_global;
 
     gtimer_sync_set_global_offset(offset_global);
