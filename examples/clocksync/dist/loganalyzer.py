@@ -5,24 +5,6 @@ import os, re, math, sys, pylab
 import time, calendar, collections
 import numpy as np
 
-def basic_linear_regression(loc, glob):
-    # Basic computations to save a little time.
-    length = len(loc)
-    sum_loc = sum(loc)
-    sum_glob = sum(glob)
-    print sum_loc, sum_glob
-    sum_loc_squared = sum(map(lambda a: a * a, loc))
-    print sum_loc_squared
-    covariance = sum([loc[i] * glob[i] for i in range(length)])
-    print covariance
-
-    # Magic formulae!  
-    skew = (covariance * length - (sum_loc * sum_glob)) 
-    skew /= (sum_loc_squared * length - (sum_loc ** 2))
-    offset = (sum_glob - skew * sum_loc) / length
-
-    return skew, offset
-
 class ClocksyncEvalLogAnalyzer():
     def __init__(self, logdir, beginRe = ".*", endRe = ".*"):
         self.name = logdir
@@ -37,6 +19,7 @@ class ClocksyncEvalLogAnalyzer():
         self.heartbeatDict = dict()
         self.localErrorMaxAvg = dict()
         self.localError = dict()
+        self.localErrorAvg = dict()
         self.logdir = logdir
         self.minBackboneTime = sys.maxint
         self.maxBackboneTime = 0
@@ -79,20 +62,14 @@ class ClocksyncEvalLogAnalyzer():
                   server, glob, local = self.triggerDict[rec][sender][trigger]
                   self.triggerDict[rec][sender][trigger] = server - self.firstTime, glob, local
 
-        skew, offset = basic_linear_regression(self.backVsGlobal.keys(), self.backVsGlobal.values())
-        newBackVsGlobal = dict()
-
-        for server, glob in self.backVsGlobal.items():
-            # glob += diffGlobal * (server - minimalServer) / diffServer
-            newBackVsGlobal[server] = glob - server * skew
-        self.backVsGlobal = newBackVsGlobal
-
         self.triggerToMaxLocalError()
         self.heartBeatToGlobalError()
         self.globalServerDiffToFunctionFit()
         od = collections.OrderedDict(sorted(self.localErrorMaxAvg.items()))
         self.localErrorMaxAvg = od
         self.scaleGlobalErrorTime()
+        od = collections.OrderedDict(sorted(self.localErrorAvg.items()))
+        self.localErrorAvg = od
         od = collections.OrderedDict(sorted(self.maxGlobalError.items()))
         self.maxGlobalError = od
         od = collections.OrderedDict(sorted(self.heartbeatDict.items()))
@@ -276,41 +253,45 @@ class ClocksyncEvalLogAnalyzer():
                     serverTimeStamp = self.dateTimeToTimeStamp(serverDate, serverTime)
                     beaconSender = int(tuple[2])
 
-                    #TODO: Remove this evil filter
-                    if beaconSender > 200:
-                        continue
-                    beaconCounter = int(tuple[3])
-                    localTime = int(tuple[4])
-                    globalTime = int(tuple[5])
-                    if not self.firstTime or self.firstTime > serverTimeStamp:
-                        self.firstTime = serverTimeStamp
+                    try:
+                        beaconCounter = int(tuple[3])
+                        localTime = int(tuple[4])
+                        globalTime = int(tuple[5])
+                        if not self.firstTime or self.firstTime > serverTimeStamp:
+                            self.firstTime = serverTimeStamp
 
-                    if not self.triggerDict.has_key(hostName):
-                        self.triggerDict[hostName] = dict()
-                    if not self.triggerDict[hostName].has_key(beaconSender):
-                        self.triggerDict[hostName][beaconSender] = dict()
-                    self.triggerDict[hostName][beaconSender][beaconCounter] = serverTimeStamp, globalTime, localTime
+                        if not self.triggerDict.has_key(hostName):
+                            self.triggerDict[hostName] = dict()
+                        if not self.triggerDict[hostName].has_key(beaconSender):
+                            self.triggerDict[hostName][beaconSender] = dict()
+                        self.triggerDict[hostName][beaconSender][beaconCounter] = serverTimeStamp, globalTime, localTime
 
-                    # Updating adj dict
-                    if not self.hosts.has_key(beaconSender):
-                      print "Found an alien: " + str(beaconSender)
-                      continue
+                        # Updating adj dict
+                        if not self.hosts.has_key(beaconSender):
+                          print "Found an alien: " + str(beaconSender)
+                          continue
 
-                    relation = self.hosts[beaconSender], hostName
-                    if not self.adjDict.has_key(relation):
-                        self.adjDict[relation] = 1.0
-                    else:
-                        self.adjDict[relation] += 1.0
+                        relation = self.hosts[beaconSender], hostName
+                        if not self.adjDict.has_key(relation):
+                            self.adjDict[relation] = 1.0
+                        else:
+                            self.adjDict[relation] += 1.0
 
-                    if self.adjDict[relation] > self.maxAdj:
-                        self.maxAdj = self.adjDict[relation]
+                        if self.adjDict[relation] > self.maxAdj:
+                            self.maxAdj = self.adjDict[relation]
+                    except Exception, e:
+                        print "Multithread: " + line
+
 
 
     def triggerToMaxLocalError(self):
         bucketsize = 10 # -> 0.1 ms buckets
         for (recv1, recv2) in self.adjDict.iterkeys():
+            # Inspect every connection only once
+            if recv1 < recv2:
+                continue
             # ignore all nodes with a weaker connection than 80%
-            if self.adjDict[recv1, recv2] < 0.8:
+            if self.adjDict[recv1, recv2] < 0.8 or self.adjDict.get((recv2, recv1), 0) < 0.8:
                 continue
             if not self.triggerDict.has_key(recv1):
                 print "No trigger for " + recv1 + " found"
@@ -339,6 +320,10 @@ class ClocksyncEvalLogAnalyzer():
                     error = abs(global1 - global2)
                     if self.localErrorMaxAvg.get(timeBucket, -1000) < error:
                         self.localErrorMaxAvg[timeBucket] = error
+
+                    summe, count = self.localErrorAvg.get(timeBucket, (0, 0))
+                    self.localErrorAvg[timeBucket] = summe + error, count + 1
+
                     self.localError[meanServer] = error
 
             if trigger < (self.sendedTrigger / 2):

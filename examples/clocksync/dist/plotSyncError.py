@@ -98,6 +98,10 @@ def main(argv):
       yvals = loga.localErrorMaxAvg.values()
       pylab.plot(xvals, yvals, label = loga.name, color = color)
 
+      xvals = loga.localErrorAvg.keys()
+      yvals = [summe / count for summe, count in loga.localErrorAvg.values()]
+      pylab.plot(xvals, yvals, color = color)
+
       if showAllPoints:
         pylab.plot(loga.localError.keys(), loga.localError.values(), "x", color = color)
 
