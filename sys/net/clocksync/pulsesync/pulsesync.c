@@ -119,7 +119,7 @@ void pulsesync_init(void)
     offset = 0;
     seq_num = 0;
 
-    puts("PULSESYNC initialized");
+    puts("PulseSync initialized");
 }
 
 static void *beacon_thread(void *arg)
@@ -181,7 +181,7 @@ static void *cyclic_driver_thread(void *arg)
 
 static void send_beacon(void)
 {
-    puts("_pulsesync_send_beacon\n");
+    DEBUG("_pulsesync_send_beacon\n");
     gtimer_timeval_t now;
     pulsesync_beacon_t *pulsesync_beacon =
             (pulsesync_beacon_t *) pulsesync_beacon_buffer;
@@ -199,7 +199,7 @@ static void send_beacon(void)
 #if PULSESYNC_SANE_OFFSET_CHECK
             if (now.global > last_global + PULSESYNC_SANE_OFFSET_THRESHOLD)
             {
-                puts("send_beacon: trying to send abnormal high value");
+                DEBUG("send_beacon: trying to send abnormal high value");
                 return;
             }
             last_global = now.global;
@@ -225,22 +225,10 @@ void pulsesync_mac_read(uint8_t *frame_payload, uint16_t src,
         gtimer_timeval_t *toa)
 {
     (void) src;
-    puts("pulsesync_mac_read");
+    DEBUG("pulsesync_mac_read");
     pulsesync_beacon_t *beacon = (pulsesync_beacon_t *) frame_payload;
     mutex_lock(&pulsesync_mutex);
     if (pause_protocol || node_id == PULSESYNC_PREFERRED_ROOT)
-    {
-        mutex_unlock(&pulsesync_mutex);
-        return;
-    }
-
-    if (src == 1 && node_id == 3)
-    {
-        mutex_unlock(&pulsesync_mutex);
-        return;
-    }
-
-    if (src < 3 && node_id == 4)
     {
         mutex_unlock(&pulsesync_mutex);
         return;
@@ -252,9 +240,9 @@ void pulsesync_mac_read(uint8_t *frame_payload, uint16_t src,
         if (offset > PULSESYNC_SANE_OFFSET_THRESHOLD
                 || offset < -PULSESYNC_SANE_OFFSET_THRESHOLD)
         {
-            puts(
+            DEBUG(
                     "pulsesync_mac_read: offset calculation yielded abnormal high value");
-            puts("pulsesync_mac_read: skipping offending beacon");
+            DEBUG("pulsesync_mac_read: skipping offending beacon");
             mutex_unlock(&pulsesync_mutex);
             return;
         }
@@ -381,7 +369,7 @@ void pulsesync_driver_timestamp(uint8_t *ieee802154_frame, uint8_t frame_length)
 #if PULSESYNC_SANE_OFFSET_CHECK
         if (now.global > last_global + PULSESYNC_SANE_OFFSET_THRESHOLD)
         {
-            puts("send_beacon: trying to send abnormal high value");
+            DEBUG("send_beacon: trying to send abnormal high value");
             return;
         }
 #endif
@@ -455,7 +443,7 @@ static void add_new_entry(pulsesync_beacon_t *beacon, gtimer_timeval_t *toa)
             DEBUG("pulsesync: error large; new root elected?\n");
             if (++num_errors > 3)
             {
-                puts("pulsesync: number of errors to high clearing table\n");
+                DEBUG("pulsesync: number of errors to high clearing table\n");
                 clear_table();
             }
         }
@@ -516,7 +504,7 @@ static uint16_t get_transceiver_addr(void)
 
     if (transceiver_pid < 0)
     {
-        puts("Transceiver not initialized");
+        puts("pulsesync: Transceiver not initialized");
         return 1;
     }
 
