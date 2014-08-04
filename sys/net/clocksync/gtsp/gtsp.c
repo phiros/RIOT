@@ -269,8 +269,8 @@ void gtsp_mac_read(uint8_t *frame_payload, uint16_t src, gtimer_timeval_t *toa)
     if (offset > GTSP_SANE_OFFSET_THRESHOLD
             || offset < -GTSP_SANE_OFFSET_THRESHOLD)
     {
-        puts("gtsp_mac_read: offset calculation yielded abnormal high value");
-        puts("gtsp_mac_read: skipping offending beacon");
+        DEBUG("gtsp_mac_read: offset calculation yielded abnormal high value");
+        DEBUG("gtsp_mac_read: skipping offending beacon");
         memset(sync_point, 0, sizeof(gtsp_sync_point_t));
         mutex_unlock(&gtsp_mutex);
         return;

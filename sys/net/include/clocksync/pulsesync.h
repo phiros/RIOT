@@ -1,7 +1,7 @@
 /**
- * pulsesync.h - Declarations and types for the Flooding Time Synchronization Protocol.
+ * The PulseSync clock synchronization protocol
  *
- * Copyright (C) 2014  Philipp Rosenkranz
+ * Copyright (C) 2014  Philipp Rosenkranz, Daniel Jentsch
  *
  * This file subject to the terms and conditions of the GNU Lesser General
  * Public License. See the file LICENSE in the top level directory for more
@@ -9,19 +9,22 @@
  */
 
 /**
- * @defgroup pulsesync    PULSESYNC - Gradient Time Synchronisation Protocol.
+ * @defgroup pulsesync    PulseSync (modified FTSP)
  * @ingroup  net
- * @brief    The Flooding Time Synchronization Protocol is clock synchronization protocol
- *           which tries to synchronizes not only the clock values but also the clock rate
- *           of all nodes in a network. It builds a spanning tree and synchronizes every node
- *           to their root. The level of a node in that tree is determined by its ID relative to
- *           its neighboring node.
- * @see      <a href="http://dl.acm.org/citation.cfm?id=1031501">
- *              Maroti et.al.: The flooding time synchronization protocol
+ * PulseSync is very similar to the flooding time synchronization protocol.
+ *
+ * The main difference is that nodes which receive synchronization beacons relay
+ * the received information almost immediately regardless of their own
+ * synchronization state. This change in behavior leads to a faster data
+ * dissemination and therefore shorter synchronization rounds.
+ * However, this protocol can be problematic in very dense network topologies
+ * because of a high likelihood of collisions.
+ * @see      <a href="http://dl.acm.org/citation.cfm?id=1644061">
+ *              Lenzen et.al.: Optimal clock synchronization in networks
  *           </a>
  * @{
  * @file     pulsesync.h
- * @brief    Declarations for the Flooding Time Synchronization Protocol.
+ * @brief    Declarations for the PulseSync clock synchronization protocol.
  * @author   Philipp Rosenkranz <philipp.rosenkranz@fu-berlin.de>
  * @author   Daniel Jentsch <d.jentsch@fu-berlin.de>
  * @}
@@ -37,52 +40,19 @@ typedef struct  __attribute__((packed)) {
     uint16_t id;
     uint16_t root;
     uint16_t seq_number;
-    uint64_t local;
-    int64_t offset;
-    float relative_rate; // << sender logical clockrate
+    uint64_t global;
 } pulsesync_beacon_t;
-
-
-typedef struct pulsesync_sync_point {
-    uint16_t src; // TODO: only for debugging
-    uint64_t local;
-    int64_t offset;
-} pulsesync_sync_point_t;
-
-enum
-{
-  PULSESYNC_OK = 1,
-  PULSESYNC_ERR = 0,
-};
-
-enum
-{
-    PULSESYNC_MAX_ENTRIES           = 8,              // number of entries in the table
-    PULSESYNC_ROOT_TIMEOUT          = 3,              // time to declare itself the root if no msg was received (in sync periods)
-    PULSESYNC_IGNORE_ROOT_MSG       = 4,              // after becoming the root ignore other roots messages (in send period)
-    PULSESYNC_ENTRY_VALID_LIMIT     = 4,              // number of entries to become synchronized
-    PULSESYNC_ENTRY_SEND_LIMIT      = 3,              // number of entries to send sync messages
-    PULSESYNC_ENTRY_THROWOUT_LIMIT  = 300,             // if time sync error is bigger than this (in 32 kHz ticks) clear the table
-};
-
-enum
-{
-    PULSESYNC_ENTRY_EMPTY = 0,
-    PULSESYNC_ENTRY_FULL  = 1,
-};
 
 typedef struct table_item
 {
-    uint8_t             state;
-    uint64_t local_time;
-    int64_t                time_offset;        // global-time - local_time
-} table_item;
-
-
+    uint8_t     state;
+    uint64_t    local;
+    uint64_t    global;
+} pulsesync_table_item_t;
 
 
 /**
- * @brief Starts the PULSESYNC module
+ * @brief Starts the PulseSync module
  */
 void pulsesync_init(void);
 
@@ -92,11 +62,11 @@ void pulsesync_init(void);
 void pulsesync_set_beacon_delay(uint32_t delay_in_sec);
 
 /**
- * @brief sets the minimal delay between sending and receiving a beacon.
+ * Sets the minimal delay between sending and receiving a beacon.
  * To be more specific: Let t_s be the time when a timestamp is applied to a beacon
  * shortly before it is sent and t_r the time when the time of arrival
  * of this sent beacon is recorded at the receiver. The difference of t_s
- * and t_r then signifies the delay between sending and receiving a beacon.
+ * and t_r then signifies the delay between the sending and receiving of a beacon.
  * This delay has to be determined for every platform (read: for different MCU /
  * transceiver combinations).
  */
