@@ -112,8 +112,8 @@ def main(argv):
     G = nx.Graph()
     for loga in logas:
       for relation in loga.adjDict:
-        G.add_edge(*relation)
-    nx.draw(G)
+        G.add_edge(*relation, color='r')
+    nx.draw(G, with_labels=False, node_color='w')
 
   if yrange>0:
     if showIsAPlot():
