@@ -1,7 +1,7 @@
 From 7a98a45da47846f0379cfbd477936f67a2af75b3 Mon Sep 17 00:00:00 2001
-From: Philipp Rosenkranz <ph.rosenkranz@gmail.com>
+From: Philipp Rosenkranz <philipp.rosenkranz@fu-berlin.de>
 Date: Thu, 2 Oct 2014 17:09:32 +0200
-Subject: [PATCH 2/2] add example topology
+Subject: [PATCH 1/1] add example topology
 
 ---
  .desvirt/example.xml | 25 +++++++++++++++++++++++++

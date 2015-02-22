@@ -5,7 +5,7 @@ PKG_DIR=$(CURDIR)/$(PKG_NAME)
 
 .PHONY: all clean patch distclean desvirtdefine
 
-all: patch desvirtdefine
+all: clean $(PKG_NAME) patch desvirtdefine
 
 patch:
 	cd "$(PKG_DIR)" && git am --ignore-whitespace "$(CURDIR)"/*.patch
