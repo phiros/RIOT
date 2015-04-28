@@ -1,6 +1,6 @@
 PKG_NAME=desvirt
 PKG_URL=https://github.com/des-testbed/desvirt.git
-PKG_VERSION=17e50ba2c653adcf3ba9911f0a629a05dc970d24
+PKG_VERSION=master
 PKG_DIR=$(CURDIR)/$(PKG_NAME)
 
 .PHONY: all clean patch distclean desvirtdefine
