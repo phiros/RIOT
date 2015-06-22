@@ -35,18 +35,48 @@ RUN add-apt-repository ppa:terry.guo/gcc-arm-embedded
 RUN apt-get update
 RUN apt-get -y dist-upgrade
 
-RUN apt-get -y install build-essential \
- git \
- gcc-multilib \
- gcc-arm-none-eabi \
- gcc-msp430 \
- pcregrep libpcre3 \
- qemu-system-x86 python3 \
- g++-multilib \
- gcc-avr binutils-avr avr-libc \
- subversion curl wget python p7zip unzip
+# native platform development and build system functionality (about 400 MB installed)
+RUN apt-get -y install \
+    build-essential \
+    curl \
+    cppcheck \
+    doxygen \
+    gcc-multilib \
+    g++-multilib \
+    git \
+    graphviz \
+    libpcre3 \
+    parallel \
+    pcregrep \
+    python \
+    python3 \
+    p7zip \
+    subversion \
+    unzip \
+    wget
 
-RUN mkdir -p /data/riotbuild
-WORKDIR /data/riotbuild
+# Cortex-M development (about 550 MB installed)
+RUN apt-get -y install \
+    gcc-arm-none-eabi \
+    libnewlib-arm-none-eabi \
+    libnewlib-dev
 
-USER strider # set the user back to strider at the end
+# MSP430 development (about 120 MB installed)
+RUN apt-get -y install \
+    gcc-msp430
+
+# AVR development (about 110 MB installed)
+RUN apt-get -y install \
+    gcc-avr \
+    binutils-avr \
+    avr-libc
+
+# LLVM/Clang build environment (about 125 MB installed)
+RUN apt-get -y install \
+    llvm
+
+# x86 bare metal emulation (about 125 MB installed) (this pulls in all of X11)
+RUN apt-get -y install \
+    qemu-system-x86
+
+USER strider
