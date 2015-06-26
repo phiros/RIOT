@@ -79,4 +79,7 @@ RUN apt-get -y install \
 RUN apt-get -y install \
     qemu-system-x86
 
+RUN printf "127.0.0.1   tlsf.baisoku.org\n127.0.0.1   olsr.org\n\
+127.0.0.1   libfixmath.googlecode.com\n127.0.0.1   git.code.sf.net" >> /etc/hosts
+
 USER strider
