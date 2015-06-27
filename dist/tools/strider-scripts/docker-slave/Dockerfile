@@ -19,7 +19,8 @@
 #            riotbuild ./dist/tools/compile_test/compile_test.py
 #
 
-FROM strider/strider-docker-slave
+#FROM strider/strider-docker-slave
+FROM strider-docker-slave
 
 MAINTAINER Philipp Rosenkranz <philipp.rosenkranz@fu-berlin.de>
 
@@ -79,7 +80,18 @@ RUN apt-get -y install \
 RUN apt-get -y install \
     qemu-system-x86
 
-RUN printf "127.0.0.1   tlsf.baisoku.org\n127.0.0.1   olsr.org\n\
-127.0.0.1   libfixmath.googlecode.com\n127.0.0.1   git.code.sf.net" >> /etc/hosts
+# Hack for non reachable sites
+RUN apt-get -y install dnsmasq
 
-USER strider
+ADD dnsmasq.conf /etc/dnsmasq.conf
+ADD dhosts /etc/dhosts 
+ADD supervisor-dnsmasq.conf /etc/supervisor/conf.d/
+
+RUN wget http://launchpadlibrarian.net/206632429/ccache_3.2.2-2_amd64.deb \
+        -O /tmp/ccache_3.2.2-2_amd64.deb \
+        && dpkg -i /tmp/ccache_3.2.2-2_amd64.deb
+
+RUN mkdir -m 777 -p /data/ccache
+ENV CCACHE_DIR /data/ccache
+
+#USER strider
