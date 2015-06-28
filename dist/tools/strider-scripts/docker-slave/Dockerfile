@@ -60,6 +60,7 @@ RUN apt-get -y install \
 RUN apt-get -y install \
     gcc-arm-none-eabi \
     libnewlib-arm-none-eabi \
+#    libstdc++-arm-none-eabi-newlib \
     libnewlib-dev
 
 # MSP430 development (about 120 MB installed)
@@ -93,5 +94,3 @@ RUN wget http://launchpadlibrarian.net/206632429/ccache_3.2.2-2_amd64.deb \
 
 RUN mkdir -m 777 -p /data/ccache
 ENV CCACHE_DIR /data/ccache
-
-#USER strider
