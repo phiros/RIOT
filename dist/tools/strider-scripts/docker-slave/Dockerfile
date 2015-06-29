@@ -19,8 +19,7 @@
 #            riotbuild ./dist/tools/compile_test/compile_test.py
 #
 
-#FROM strider/strider-docker-slave
-FROM strider-docker-slave
+FROM strider/strider-docker-slave
 
 MAINTAINER Philipp Rosenkranz <philipp.rosenkranz@fu-berlin.de>
 
@@ -30,8 +29,6 @@ USER root
 
 RUN apt-get update
 RUN DEBIAN_FRONTEND=noninteractive apt-get install -y -q python-software-properties software-properties-common
-
-RUN add-apt-repository ppa:terry.guo/gcc-arm-embedded
 
 RUN apt-get update
 RUN apt-get -y dist-upgrade
@@ -46,6 +43,7 @@ RUN apt-get -y install \
     g++-multilib \
     git \
     graphviz \
+    bsdmainutils \
     libpcre3 \
     parallel \
     pcregrep \
@@ -60,7 +58,7 @@ RUN apt-get -y install \
 RUN apt-get -y install \
     gcc-arm-none-eabi \
     libnewlib-arm-none-eabi \
-#    libstdc++-arm-none-eabi-newlib \
+    libstdc++-arm-none-eabi-newlib \
     libnewlib-dev
 
 # MSP430 development (about 120 MB installed)
@@ -82,7 +80,7 @@ RUN apt-get -y install \
     qemu-system-x86
 
 # Hack for non reachable sites
-RUN apt-get -y install dnsmasq
+RUN apt-get -y install dnsmasq supervisor
 
 ADD dnsmasq.conf /etc/dnsmasq.conf
 ADD dhosts /etc/dhosts 
