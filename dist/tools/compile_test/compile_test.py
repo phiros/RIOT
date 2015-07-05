@@ -104,6 +104,7 @@ def _get_cpus_from_files(files):
     return cpus
 
 def is_updated(application_folder, subprocess_env):
+    return True
     try:
         if base_branch == '':
             return True
