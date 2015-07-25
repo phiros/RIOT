@@ -19,65 +19,39 @@
 #            riotbuild ./dist/tools/compile_test/compile_test.py
 #
 
-FROM strider/strider-docker-slave
-
-MAINTAINER Philipp Rosenkranz <philipp.rosenkranz@fu-berlin.de>
+FROM riot/riotbuild:latest
 
 ENV DEBIAN_FRONTEND noninteractive
 
-USER root
+RUN apt-get -y update
 
-RUN apt-get update
-RUN DEBIAN_FRONTEND=noninteractive apt-get install -y -q python-software-properties software-properties-common
+# Node.js and Git are required
+RUN curl -sL https://deb.nodesource.com/setup_0.12 | bash -
+RUN apt-get install -y nodejs git
+#RUN apt-get -y install nodejs npm git
+#RUN update-alternatives --install /usr/bin/node node /usr/bin/nodejs 10
 
-RUN apt-get update
-RUN apt-get -y dist-upgrade
+# git wants this
+RUN locale-gen en_US.UTF-8
 
-# native platform development and build system functionality (about 400 MB installed)
-RUN apt-get -y install \
-    build-essential \
-    curl \
-    cppcheck \
-    doxygen \
-    gcc-multilib \
-    g++-multilib \
-    git \
-    graphviz \
-    bsdmainutils \
-    libpcre3 \
-    parallel \
-    pcregrep \
-    python \
-    python3 \
-    p7zip \
-    subversion \
-    unzip \
-    wget
+# Setup workspace and user
+RUN adduser --home /home/strider --gecos "" strider
+RUN mkdir -p /home/strider/workspace
+RUN chown -R strider /home/strider
 
-# Cortex-M development (about 550 MB installed)
-RUN apt-get -y install \
-    gcc-arm-none-eabi \
-    libnewlib-arm-none-eabi \
-    libstdc++-arm-none-eabi-newlib \
-    libnewlib-dev
+# Get the slave
+RUN npm install -g strider-docker-slave@1.*.*
 
-# MSP430 development (about 120 MB installed)
-RUN apt-get -y install \
-    gcc-msp430
+# Install supervisord
+RUN apt-get -y install supervisor && \
+  mkdir -p /var/log/supervisor && \
+  mkdir -p /etc/supervisor/conf.d
 
-# AVR development (about 110 MB installed)
-RUN apt-get -y install \
-    gcc-avr \
-    binutils-avr \
-    avr-libc
-
-# LLVM/Clang build environment (about 125 MB installed)
-RUN apt-get -y install \
-    llvm
-
-# x86 bare metal emulation (about 125 MB installed) (this pulls in all of X11)
-RUN apt-get -y install \
-    qemu-system-x86
+# Run the slave
+# Additional background services can be configured by adding
+# a supervisor config file to the config directory 
+# (/etc/supervisor/conf.d/)
+CMD supervisord -c /etc/supervisor/supervisord.conf && su strider -c 'strider-docker-slave'
 
 # Hack for non reachable sites
 RUN apt-get -y install dnsmasq supervisor
@@ -92,3 +66,6 @@ RUN wget http://launchpadlibrarian.net/206632429/ccache_3.2.2-2_amd64.deb \
 
 RUN mkdir -m 777 -p /data/ccache
 ENV CCACHE_DIR /data/ccache
+
+WORKDIR /home/strider/workspace
+ENV HOME /home/strider

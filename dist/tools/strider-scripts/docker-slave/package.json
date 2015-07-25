@@ -1,0 +1,23 @@
+{
+  "name": "strider-docker-slave",
+  "version": "1.0.1",
+  "description": "Runs inside of a docker container, running commands, communicating via JSON",
+  "main": "slave.js",
+  "bin": "slave.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Strider-CD/strider-docker-slave.git"
+  },
+  "author": "Jared Forsyth",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Strider-CD/strider-docker-slave/issues"
+  },
+  "homepage": "https://github.com/Strider-CD/strider-docker-slave",
+  "dependencies": {
+    "event-stream": "^3.1.7"
+  }
+}
